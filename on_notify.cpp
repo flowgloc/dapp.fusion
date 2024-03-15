@@ -3,7 +3,7 @@
 void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, std::string memo){
 	const name tkcontract = get_first_receiver();
 
-    check( quantity.amount > 0, "Invalid quantity." );
+    check( quantity.amount > 0, "Must redeem a positive quantity" );
     check( quantity.amount < MAX_ASSET_AMOUNT, "quantity too large" );
 
     if( from == get_self() || to != get_self() ){

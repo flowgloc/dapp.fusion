@@ -282,6 +282,9 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 	auto staker = staker_t.require_find(user.value, "you are not staking any sWAX");
 	check(staker->swax_balance >= swax_to_redeem, "you are trying to redeem more than you have");
 
+    check( swax_to_redeem.amount > 0, "Must redeem a positive quantity" );
+    check( swax_to_redeem.amount < MAX_ASSET_AMOUNT, "quantity too large" );
+
 	/** 
 	* figure out which epoch(s) to take this from, update the epoch(s) to reflect the request
 	* first need to find out the epoch linked to the unstake action that is closest to taking place
@@ -296,63 +299,119 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 	config c = configs.get();
 
 	bool request_can_be_filled = false;
+	eosio::asset remaining_amount_to_fill = swax_to_redeem;
 	uint64_t epoch_to_request_from = s.last_epoch_start_time - c.seconds_between_epochs;
 
-	//see if the epoch exists
-	auto epoch_itr = epochs_t.find(epoch_to_request_from);
+	std::vector<uint64_t> epochs_to_check = {
+		epoch_to_request_from,
+		epoch_to_request_from + c.seconds_between_epochs,
+		epoch_to_request_from + ( c.seconds_between_epochs * 2 )
+	};
 
-	//if it does...
-	if(epoch_itr != epochs_t.end()){
+	/** 
+	* loop through the 3 redemption scopes and if the user has any reqs,
+	* delete them and sub the amounts from epoch_itr->wax_to_refund
+	*/
 
-		//see if the deadline for redeeming has passed yet
-		if(epoch_itr->time_to_unstake > now()){
+	for(uint64_t ep : epochs_to_check){
+		auto epoch_itr = epochs_t.find(ep);
 
-			if(epoch_itr->wax_to_refund < epoch_itr->wax_bucket){
-				//there are still funds available for redemption
+		if(epoch_itr != epochs_t.end()){
+			requests_tbl requests_t = requests_tbl(get_self(), epoch_itr->redemption_period_start_time);
+			auto req_itr = requests_t.find(user.value);	
 
-				int64_t amount_available = safeSubInt64(epoch_itr->wax_bucket.amount, epoch_itr->wax_to_refund.amount);
+			if(req_itr != requests_t.end()){
+				//there is a pending request
 
-				if(amount_available >= swax_to_redeem.amount){
-					//this epoch has enough to cover the whole request
-					request_can_be_filled = true;
+				//subtract the pending amount from epoch_itr->wax_to_refund
+				int64_t updated_refunding_amount = safeSubInt64(epoch_itr->wax_to_refund.amount, req_itr->wax_amount_requested.amount);
 
-					int64_t updated_refunding_amount = safeAddInt64(epoch_itr->wax_to_refund.amount, swax_to_redeem.amount);
+				epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+					_e.wax_to_refund = asset(updated_refunding_amount, WAX_SYMBOL);
+				});
 
-					//add the amount to the epoch's wax_to_refund
-					epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
-						_e.wax_to_refund = asset(updated_refunding_amount, WAX_SYMBOL);
-					});
-
-					/** 
-					* upsert this request into the request_tbl
-					* this request will REPLACE any previous ones, not increase the amount
-					*/
-
-					requests_tbl requests_t = requests_tbl(get_self(), epoch_to_request_from);
-					auto req_itr = requests_t.find(user.value);
-
-					if(req_itr == requests_t.end()){
-						requests_t.emplace(user, [&](auto &_r){
-							_r.wallet = user;
-							_r.wax_amount_requested = asset(swax_to_redeem.amount, WAX_SYMBOL);
-						});
-					} else {
-						requests_t.modify(req_itr, user, [&](auto &_r){
-							_r.wax_amount_requested = asset(swax_to_redeem.amount, WAX_SYMBOL);
-						});						
-					}
-
-
-				} else {
-					//this epoch has some funds, but not enough for the whole request
-
-				}
-
+				//erase the request
+				req_itr = requests_t.erase(req_itr);
 			}
-		}
+		}	
 	}
 
-	//store this request in the requests_tbl (scoped by redemption period start time)
+
+	/**
+	* now loop through them again and process them
+	* if request becomes filled, break out of the loop
+	*/
+
+	for(uint64_t ep : epochs_to_check){
+		auto epoch_itr = epochs_t.find(ep);
+
+		if(epoch_itr != epochs_t.end()){
+
+			//see if the deadline for redeeming has passed yet
+			if(epoch_itr->time_to_unstake > now()){
+
+				if(epoch_itr->wax_to_refund < epoch_itr->wax_bucket){
+					//there are still funds available for redemption
+
+					int64_t amount_available = safeSubInt64(epoch_itr->wax_bucket.amount, epoch_itr->wax_to_refund.amount);
+
+					if(amount_available >= remaining_amount_to_fill.amount){
+						//this epoch has enough to cover the whole request
+						request_can_be_filled = true;
+
+						int64_t updated_refunding_amount = safeAddInt64(epoch_itr->wax_to_refund.amount, remaining_amount_to_fill.amount);
+
+						//add the amount to the epoch's wax_to_refund
+						epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+							_e.wax_to_refund = asset(updated_refunding_amount, WAX_SYMBOL);
+						});
+
+						/** 
+						* INSERT this request into the request_tbl
+						* (any previous records should have been deleted first)
+						*/
+
+						requests_tbl requests_t = requests_tbl(get_self(), epoch_itr->redemption_period_start_time);
+						auto req_itr = requests_t.find(user.value);
+
+						check( req_itr == requests_t.end(), "user has an existing redemption request in this epoch" );
+
+						requests_t.emplace(user, [&](auto &_r){
+							_r.wallet = user;
+							_r.wax_amount_requested = asset(remaining_amount_to_fill.amount, WAX_SYMBOL);
+						});
+
+
+					} else {
+						//this epoch has some funds, but not enough for the whole request
+						int64_t updated_refunding_amount = safeAddInt64(epoch_itr->wax_to_refund.amount, amount_available);
+
+						//debit the amount remaining so we are checking an updated number on the next loop
+						remaining_amount_to_fill.amount = safeSubInt64(remaining_amount_to_fill.amount, amount_available);
+
+						epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+							_e.wax_to_refund = asset(updated_refunding_amount, WAX_SYMBOL);
+						});
+
+						requests_tbl requests_t = requests_tbl(get_self(), epoch_itr->redemption_period_start_time);
+						auto req_itr = requests_t.find(user.value);
+
+						check( req_itr == requests_t.end(), "user has an existing redemption request in this epoch" );
+						
+						requests_t.emplace(user, [&](auto &_r){
+							_r.wallet = user;
+							_r.wax_amount_requested = asset(amount_available, WAX_SYMBOL);
+						});
+					}
+				}
+			}
+
+		}	
+
+		if( request_can_be_filled ) break;
+	}	 
+
+	check( request_can_be_filled, "There is not enough wax available to fill this request yet" );
 
 }
 
