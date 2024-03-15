@@ -267,6 +267,42 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 }
 
 /**
+* reallocate
+* used for taking any funds that were requested to be redeemed, but werent redeemed in time
+*/ 
+
+ACTION fusion::reallocate(){
+	//should anyone be able to call this? all it does is move unredeemed to available_for_rental, so probably yes
+}
+
+ACTION fusion::redeem(const eosio::name& user){
+	require_auth(user);
+	sync_user(user);
+	sync_epoch();
+
+	//find out if there is a current redemption period, and when
+
+	//find if the user has a request for this period
+
+	//if they do, make sure the amount is <= their swax amount
+
+	//make sure s.wax_for_redemption has enough for them (it always should!)
+
+	//subtract the amount from s.wax_for_redemption
+
+	//subtract the requested amount from their swax balance
+
+	//retire the sWAX
+
+	//update the swax_currently_earning amount
+
+	//transfer wax to the user
+
+	//erase the request
+}
+
+
+/**
 * reqredeem (request redeem)
 * initiates a redemption request
 * the contract will automatically figure out which epoch(s) have enough wax available
