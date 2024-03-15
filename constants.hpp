@@ -21,6 +21,7 @@ static const eosio::asset ZERO_WAX = eosio::asset(0, WAX_SYMBOL);
 
 //Other
 static constexpr uint64_t INITIAL_EPOCH_START_TIMESTAMP = 1710460800; /* 3/15/2024 00:00:00 GMT */
+static constexpr eosio::name FALLBACK_CPU_RECEIVER = "updatethings"_n;
 
 //Errors
 static const char* ERR_CONFIG_NOT_FOUND = "could not locate config";

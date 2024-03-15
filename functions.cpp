@@ -1,5 +1,9 @@
 #pragma once
 
+std::string fusion::cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp){
+  return ("|stake_cpu|" + cpu_receiver.to_string() + "|" + std::to_string(epoch_timestamp) + "|").c_str();
+}
+
 bool fusion::is_cpu_contract(const eosio::name& contract){
   config c = configs.get();
 
@@ -21,7 +25,14 @@ void fusion::issue_swax(const int64_t& amount){
 }
 
 bool fusion::memo_is_expected(const std::string& memo){
-  if( memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" || memo == "cpu rental return" ) return true;
+  if( memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" || memo == "cpu rental return" ){
+    return true;
+  }
+
+  if(memo.find("rent_cpu") != std::string::npos){
+      return true;
+  }  
+
   return false;
 }
 
@@ -75,22 +86,27 @@ void fusion::sync_epoch(){
     s.current_cpu_contract = next_cpu_contract;
     states.set(s, _self);
 
-    /* also actually create the new epoch here */
+    /* also actually create the new epoch here (it should already exist because of CPU staking) */
 
-    epochs_t.emplace(get_self(), [&](auto &_e){
-      _e.start_time = next_epoch_start_time;
-      /* unstake 3 days before epoch ends */
-      _e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
-      _e.cpu_wallet = next_cpu_contract;
-      _e.wax_bucket = ZERO_WAX;
-      _e.wax_to_refund = ZERO_WAX;
-      /* redemption starts at the end of the epoch, ends 48h later */
-      _e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
-      _e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + c.redemption_period_length_seconds;
-      _e.total_cpu_funds_returned = ZERO_WAX;
-      _e.total_added_to_redemption_bucket = ZERO_WAX;
-    });
+    auto epoch_itr = epochs_t.find(next_epoch_start_time);
 
+    if(epoch_itr == epochs_t.end()){
+
+      epochs_t.emplace(get_self(), [&](auto &_e){
+        _e.start_time = next_epoch_start_time;
+        /* unstake 3 days before epoch ends */
+        _e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
+        _e.cpu_wallet = next_cpu_contract;
+        _e.wax_bucket = ZERO_WAX;
+        _e.wax_to_refund = ZERO_WAX;
+        /* redemption starts at the end of the epoch, ends 48h later */
+        _e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
+        _e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + c.redemption_period_length_seconds;
+        _e.total_cpu_funds_returned = ZERO_WAX;
+        _e.total_added_to_redemption_bucket = ZERO_WAX;
+      });
+      
+    }
   }
 
   return;

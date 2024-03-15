@@ -38,6 +38,7 @@ CONTRACT fusion : public contract {
 		ACTION redeem(const eosio::name& user);
 		ACTION reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
 		ACTION stake(const eosio::name& user);
+		ACTION stakeallcpu();
 
 
 		//Notifications
@@ -51,7 +52,6 @@ CONTRACT fusion : public contract {
 		state_singleton states;
 
 		//Multi Index Tables
-		cpu_table cpu_t = cpu_table(get_self(), get_self().value);
 		eco_table eco_t = eco_table(get_self(), get_self().value);
 		epochs_table epochs_t = epochs_table(get_self(), get_self().value);
 		snaps_table snaps_t = snaps_table(get_self(), get_self().value);
@@ -59,6 +59,7 @@ CONTRACT fusion : public contract {
 
 
 		//Functions
+		std::string cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp);
 		bool is_cpu_contract(const eosio::name& contract);
 		void issue_lswax(const int64_t& amount, const eosio::name& receiver);
 		void issue_swax(const int64_t& amount);

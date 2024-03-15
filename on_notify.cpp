@@ -228,4 +228,14 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		states.set(s, _self);
   	}
 
+  	/**
+  	* rent_cpu
+  	* if it has this, we need to parse it and find out which epoch, and who to rent to
+  	*/ 
+
+  	if( memo.find("rent_cpu") != std::string::npos ){
+  		check( tkcontract == WAX_CONTRACT, "only WAX can be sent with this memo" );
+
+  	}
+
 }

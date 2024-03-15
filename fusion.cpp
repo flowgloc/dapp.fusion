@@ -205,6 +205,7 @@ ACTION fusion::initconfig(){
 		"cpu3.fusion"_n
 	};
 	c.redemption_period_length_seconds = 60 * 60 * 24 * 2; /* 2 days */
+	c.seconds_between_stakeall = 60 * 60 * 24; /* once per day */
 	configs.set(c, _self);
 
 	state s{};
@@ -221,6 +222,7 @@ ACTION fusion::initconfig(){
 	s.last_epoch_start_time = INITIAL_EPOCH_START_TIMESTAMP;
 	s.wax_available_for_rentals = ZERO_WAX;
 	s.cost_to_rent_1_wax = asset(1000000, WAX_SYMBOL); /* 0.01 WAX per day */
+	s.next_stakeall_time = INITIAL_EPOCH_START_TIMESTAMP + 60 * 60 * 24; /* 1 day */
 	states.set(s, _self);
 }
 
@@ -516,4 +518,109 @@ ACTION fusion::stake(const eosio::name& user){
 		_s.claimable_wax = ZERO_WAX;
 		_s.last_update = now();
 	});
+}
+
+/**
+* stakeallcpu
+* once every 24h, this can be called to take any un-rented wax and just stake it so it earns the normal amount
+*/ 
+
+ACTION fusion::stakeallcpu(){
+	//should anyone be able to call this? probably
+
+	//who should receive the CPU?
+
+	sync_epoch();
+
+	//get the last epoch start time
+	state s = states.get();
+	config c = configs.get();
+
+	//if now > epoch start time + 48h, it means redemption is over
+	check( now() >= s.next_stakeall_time, ( "next stakeall time is not until " + std::to_string(s.next_stakeall_time) ).c_str() );
+
+	if(s.wax_available_for_rentals.amount > 0){
+		//stake it
+
+		/** 
+		* we can get the cpu contract by taking the last epoch start time (i.e. lets say epoch 3 started)
+		* then find out the cpu contract of the next epoch (epoch 4)
+		* this will also be the same as going back 2 epochs (epoch 1)
+		* the main issue here is we need to make sure this does not cancel any unstakes (the time matches exactly)
+		* so, before we send - we need to check and make sure that 2 epochs ago has been fully returned already
+		*/
+
+		//first need the timestamp AND cpu contract of the current epoch
+
+		//then we can just get the next contract in line and next epoch in line
+		int next_cpu_index = 1;
+		bool contract_was_found = false;
+
+		for(eosio::name cpu : c.cpu_contracts){
+
+			if( cpu == s.current_cpu_contract ){
+			  contract_was_found = true;
+
+			  if(next_cpu_index < c.cpu_contracts.size()){
+			    next_cpu_index = 0;
+			  }
+			}
+
+			if(contract_was_found) break;
+			next_cpu_index ++;
+		}
+
+		check( contract_was_found, "error locating cpu contract" );
+		eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
+		check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
+
+		//then we can also see if there is an epoch that exists with the timetamp from 2 epochs ago
+		uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
+		uint64_t two_epochs_ago = s.last_epoch_start_time - (c.seconds_between_epochs * 2);
+
+		//if so, check that its been fully refunded
+		auto epoch_itr = epochs_t.find(two_epochs_ago);
+		if(epoch_itr != epochs_t.end()){
+			//an epoch was found - make sure it's been refunded
+			check( epoch_itr->total_cpu_funds_returned >= epoch_itr->wax_bucket, (next_cpu_contract.to_string() + " still has funds tied up").c_str() );
+		}
+
+		transfer_tokens( s.current_cpu_contract, s.wax_available_for_rentals, WAX_CONTRACT, cpu_stake_memo(FALLBACK_CPU_RECEIVER, next_epoch_start_time) );
+
+		//upsert the epoch that it was staked to, so it reflects the added wax
+		auto next_epoch_itr = epochs_t.find(next_epoch_start_time);
+
+		if(next_epoch_itr == epochs_t.end()){
+			//create new epoch
+			epochs_t.emplace(get_self(), [&](auto &_e){
+				_e.start_time = next_epoch_start_time;
+				/* unstake 3 days before epoch ends */
+				_e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
+				_e.cpu_wallet = next_cpu_contract;
+				_e.wax_bucket = s.wax_available_for_rentals;
+				_e.wax_to_refund = ZERO_WAX;
+				/* redemption starts at the end of the epoch, ends 48h later */
+				_e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
+				_e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + c.redemption_period_length_seconds;
+				_e.total_cpu_funds_returned = ZERO_WAX;
+				_e.total_added_to_redemption_bucket = ZERO_WAX;
+			});
+
+		} else {
+			//update epoch
+			asset current_wax_bucket = next_epoch_itr->wax_bucket;
+			current_wax_bucket.amount = safeAddInt64(current_wax_bucket.amount, s.wax_available_for_rentals.amount);
+			epochs_t.modify(next_epoch_itr, get_self(), [&](auto &_e){
+				_e.wax_bucket = current_wax_bucket;
+			});
+		}
+
+		//reset it to 0
+		s.wax_available_for_rentals = ZERO_WAX;
+	}
+
+	//update the next_stakeall_time
+	s.next_stakeall_time += c.seconds_between_stakeall;
+
+	states.set(s, _self);
 }
