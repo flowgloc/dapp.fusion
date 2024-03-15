@@ -266,6 +266,96 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 	return;
 }
 
+/**
+* reqredeem (request redeem)
+* initiates a redemption request
+* the contract will automatically figure out which epoch(s) have enough wax available
+* the user must claim (redeem) their wax within 2 days of it becoming available, or it will be restaked
+*/ 
+
+ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem){
+	require_auth(user);
+	sync_user(user);
+	sync_epoch();
+
+	//make sure the amount to redeem is not more than their balance
+	auto staker = staker_t.require_find(user.value, "you are not staking any sWAX");
+	check(staker->swax_balance >= swax_to_redeem, "you are trying to redeem more than you have");
+
+	/** 
+	* figure out which epoch(s) to take this from, update the epoch(s) to reflect the request
+	* first need to find out the epoch linked to the unstake action that is closest to taking place
+	* does that have any wax available?
+	* if so, put as much of this request into that epoch as possible
+	* if there is anything left, then check the next epoch too
+	* if that has anything available, repeat
+	* can do this one more time if there is a 3rd epoch available
+	*/
+
+	state s = states.get();
+	config c = configs.get();
+
+	bool request_can_be_filled = false;
+	uint64_t epoch_to_request_from = s.last_epoch_start_time - c.seconds_between_epochs;
+
+	//see if the epoch exists
+	auto epoch_itr = epochs_t.find(epoch_to_request_from);
+
+	//if it does...
+	if(epoch_itr != epochs_t.end()){
+
+		//see if the deadline for redeeming has passed yet
+		if(epoch_itr->time_to_unstake > now()){
+
+			if(epoch_itr->wax_to_refund < epoch_itr->wax_bucket){
+				//there are still funds available for redemption
+
+				int64_t amount_available = safeSubInt64(epoch_itr->wax_bucket.amount, epoch_itr->wax_to_refund.amount);
+
+				if(amount_available >= swax_to_redeem.amount){
+					//this epoch has enough to cover the whole request
+					request_can_be_filled = true;
+
+					int64_t updated_refunding_amount = safeAddInt64(epoch_itr->wax_to_refund.amount, swax_to_redeem.amount);
+
+					//add the amount to the epoch's wax_to_refund
+					epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+						_e.wax_to_refund = asset(updated_refunding_amount, WAX_SYMBOL);
+					});
+
+					/** 
+					* upsert this request into the request_tbl
+					* this request will REPLACE any previous ones, not increase the amount
+					*/
+
+					requests_tbl requests_t = requests_tbl(get_self(), epoch_to_request_from);
+					auto req_itr = requests_t.find(user.value);
+
+					if(req_itr == requests_t.end()){
+						requests_t.emplace(user, [&](auto &_r){
+							_r.wallet = user;
+							_r.wax_amount_requested = asset(swax_to_redeem.amount, WAX_SYMBOL);
+						});
+					} else {
+						requests_t.modify(req_itr, user, [&](auto &_r){
+							_r.wax_amount_requested = asset(swax_to_redeem.amount, WAX_SYMBOL);
+						});						
+					}
+
+
+				} else {
+					//this epoch has some funds, but not enough for the whole request
+
+				}
+
+			}
+		}
+	}
+
+	//store this request in the requests_tbl (scoped by redemption period start time)
+
+}
+
 ACTION fusion::stake(const eosio::name& user){
 	require_auth(user);
 

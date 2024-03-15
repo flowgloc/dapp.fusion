@@ -34,6 +34,7 @@ CONTRACT fusion : public contract {
 		ACTION distribute();
 		ACTION initconfig();
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
+		ACTION reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
 		ACTION stake(const eosio::name& user);
 
 
