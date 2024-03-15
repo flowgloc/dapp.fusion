@@ -78,10 +78,13 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 	    		_e.cpu_wallet = "idk"_n; /* how do we figure this out, and do we transfer there now? */
 	    		_e.wax_bucket = quantity;
 	    		_e.wax_to_refund = ZERO_WAX;
+	    		/* redemption starts at the end of the epoch, ends 48h later */
+	    		_e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
+	    		_e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + (60 * 60 * 48);
 	    	});
 	    } else {
 	    	/* TODO: safemath for the addition to wax_bucket */
-	    	
+
 	    	epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
 	    		_e.wax_bucket += quantity;
 	    	});

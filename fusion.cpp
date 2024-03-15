@@ -273,6 +273,22 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 
 ACTION fusion::reallocate(){
 	//should anyone be able to call this? all it does is move unredeemed to available_for_rental, so probably yes
+
+	sync_epoch();
+
+	//get the last epoch start time
+	state s = states.get();
+
+	//if now > epoch start time + 48h, it means redemption is over
+	check( now() > s.last_epoch_start_time + (60 * 60 * 48), "redemption period has not ended yet" );
+
+	//move funds from redemption pool to rental pool
+	check( s.wax_for_redemption.amount > 0, "there is no wax to reallocate" );
+
+	s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, s.wax_for_redemption.amount);
+	s.wax_for_redemption = ZERO_WAX;
+
+	states.set(s, _self);
 }
 
 ACTION fusion::redeem(const eosio::name& user){
