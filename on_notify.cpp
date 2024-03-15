@@ -79,6 +79,12 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 	    		_e.wax_bucket = quantity;
 	    		_e.wax_to_refund = ZERO_WAX;
 	    	});
+	    } else {
+	    	/* TODO: safemath for the addition to wax_bucket */
+	    	
+	    	epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+	    		_e.wax_bucket += quantity;
+	    	});
 	    }
 
 	    states.set(s, _self);

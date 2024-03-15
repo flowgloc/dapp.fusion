@@ -26,6 +26,8 @@ ACTION fusion::claimrewards(const eosio::name& user){
 ACTION fusion::distribute(){
 	//should anyone be able to call this?
 
+	sync_epoch();
+
 	//get the config
 	config c = configs.get();
 
@@ -66,11 +68,6 @@ ACTION fusion::distribute(){
 
 	//increase the backing of lsWAX with the newly issued sWAX
 	s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, (int64_t) autocompounding_allocation );
-
-	//allocate this WAX the same way that it would be handled if we received a "stake" transfer
-
-
-
 
 
 	/** 
@@ -146,7 +143,34 @@ ACTION fusion::distribute(){
 	//update next_dist in the state table
 	s.next_distribution += c.seconds_between_distributions;
 
-	states.set(s, _self);
+    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, swax_autocompounding_alloc_i64);
+
+    //check when the last epoch started, calculate next epoch start
+    //upsert epoch and add this to the bucket
+    uint64_t next_epoch_start_time = s.last_epoch_start_time += c.seconds_between_epochs;
+    auto epoch_itr = epochs_t.find(next_epoch_start_time);
+
+    if(epoch_itr == epochs_t.end()){
+    	epochs_t.emplace(get_self(), [&](auto &_e){
+    		_e.start_time = next_epoch_start_time;
+    		/* unstake 3 days before epoch ends */
+    		_e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
+    		_e.cpu_wallet = "idk"_n; /* how do we figure this out, and do we transfer there now? */
+    		_e.wax_bucket = asset(swax_autocompounding_alloc_i64, WAX_SYMBOL);
+    		_e.wax_to_refund = ZERO_WAX;
+    	});
+    } else {
+    	/* TODO: safemath for the addition to wax_bucket */
+    	
+    	epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+    		_e.wax_bucket += asset(swax_autocompounding_alloc_i64, WAX_SYMBOL);
+    	});
+    }
+
+    states.set(s, _self);
+
+	return;	
+
 }
 
 ACTION fusion::initconfig(){
