@@ -59,6 +59,7 @@ CONTRACT fusion : public contract {
 
 
 		//Functions
+		bool is_cpu_contract(const eosio::name& contract);
 		void issue_lswax(const int64_t& amount, const eosio::name& receiver);
 		void issue_swax(const int64_t& amount);
 		bool memo_is_expected(const std::string& memo);

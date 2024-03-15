@@ -199,6 +199,12 @@ ACTION fusion::initconfig(){
 		{"taco"_n, eco_split },
 		{"alcor"_n, eco_split }
 	};
+	c.cpu_contracts = {
+		"cpu1.fusion"_n,
+		"cpu2.fusion"_n,
+		"cpu3.fusion"_n
+	};
+	c.redemption_period_length_seconds = 60 * 60 * 24 * 2; /* 2 days */
 	configs.set(c, _self);
 
 	state s{};
@@ -278,9 +284,10 @@ ACTION fusion::reallocate(){
 
 	//get the last epoch start time
 	state s = states.get();
+	config c = configs.get();
 
 	//if now > epoch start time + 48h, it means redemption is over
-	check( now() > s.last_epoch_start_time + (60 * 60 * 48), "redemption period has not ended yet" );
+	check( now() > s.last_epoch_start_time + c.redemption_period_length_seconds, "redemption period has not ended yet" );
 
 	//move funds from redemption pool to rental pool
 	check( s.wax_for_redemption.amount > 0, "there is no wax to reallocate" );
@@ -301,7 +308,7 @@ ACTION fusion::redeem(const eosio::name& user){
 	config c = configs.get();
 
 	uint64_t redemption_start_time = s.last_epoch_start_time;
-	uint64_t redemption_end_time = s.last_epoch_start_time + (60 * 60 * 48);
+	uint64_t redemption_end_time = s.last_epoch_start_time + c.redemption_period_length_seconds;
  
 	check( now() < redemption_end_time, 
 		( "next redemption does not start until " + std::to_string(s.last_epoch_start_time + c.seconds_between_epochs) ).c_str() 

@@ -1,5 +1,15 @@
 #pragma once
 
+bool fusion::is_cpu_contract(const eosio::name& contract){
+  config c = configs.get();
+
+  if( std::find( c.cpu_contracts.begin(), c.cpu_contracts.end(), contract) != c.cpu_contracts.end() ){
+    return true;
+  }
+
+  return false;
+}
+
 void fusion::issue_lswax(const int64_t& amount, const eosio::name& receiver){
   action(permission_level{get_self(), "active"_n}, TOKEN_CONTRACT,"issue"_n,std::tuple{ get_self(), receiver, eosio::asset(amount, LSWAX_SYMBOL), std::string("issuing lsWAX to liquify")}).send();
   return;
@@ -11,7 +21,7 @@ void fusion::issue_swax(const int64_t& amount){
 }
 
 bool fusion::memo_is_expected(const std::string& memo){
-  if( memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" ) return true;
+  if( memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" || memo == "cpu rental return" ) return true;
   return false;
 }
 
@@ -34,6 +44,27 @@ void fusion::sync_epoch(){
   state s = states.get();
   config c = configs.get();
 
+  int next_cpu_index = 1;
+  bool contract_was_found = false;
+
+  for(eosio::name cpu : c.cpu_contracts){
+
+    if( cpu == s.current_cpu_contract ){
+      contract_was_found = true;
+
+      if(next_cpu_index < c.cpu_contracts.size()){
+        next_cpu_index = 0;
+      }
+    }
+
+    if(contract_was_found) break;
+    next_cpu_index ++;
+  }
+
+  check( contract_was_found, "error locating cpu contract" );
+  eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
+  check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
+
   //calculate when the next is supposed to start
   uint64_t next_epoch_start_time = s.last_epoch_start_time += c.seconds_between_epochs;
 
@@ -41,7 +72,25 @@ void fusion::sync_epoch(){
   if( now() >= next_epoch_start_time ){
     //if so, update last epoch start time
     s.last_epoch_start_time = next_epoch_start_time;
+    s.current_cpu_contract = next_cpu_contract;
     states.set(s, _self);
+
+    /* also actually create the new epoch here */
+
+    epochs_t.emplace(get_self(), [&](auto &_e){
+      _e.start_time = next_epoch_start_time;
+      /* unstake 3 days before epoch ends */
+      _e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
+      _e.cpu_wallet = next_cpu_contract;
+      _e.wax_bucket = ZERO_WAX;
+      _e.wax_to_refund = ZERO_WAX;
+      /* redemption starts at the end of the epoch, ends 48h later */
+      _e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
+      _e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + c.redemption_period_length_seconds;
+      _e.total_cpu_funds_returned = ZERO_WAX;
+      _e.total_added_to_redemption_bucket = ZERO_WAX;
+    });
+
   }
 
   return;

@@ -63,32 +63,25 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		//state should not be fetched until after epoch is synced
 	    state s = states.get();
 	    s.swax_currently_earning.amount = safeAddInt64(s.swax_currently_earning.amount, quantity.amount);
-	    s.wax_available_for_rentals += quantity;
+	    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, quantity.amount);
 
-	    //check when the last epoch started, calculate next epoch start
-	    //upsert epoch and add this to the bucket
+	    /** 
+	    * this actually should only happen when sending wax to the cpu contract linked to an epoch
+	    * until it gets sent there, it should not be counted in the epoch's wax bucket
+	    */ 
+
+	    /* TODO: safemath for the addition to wax_bucket */
+
+	    /**
 	    uint64_t next_epoch_start_time = s.last_epoch_start_time += c.seconds_between_epochs;
 	    auto epoch_itr = epochs_t.find(next_epoch_start_time);
 
-	    if(epoch_itr == epochs_t.end()){
-	    	epochs_t.emplace(get_self(), [&](auto &_e){
-	    		_e.start_time = next_epoch_start_time;
-	    		/* unstake 3 days before epoch ends */
-	    		_e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
-	    		_e.cpu_wallet = "idk"_n; /* how do we figure this out, and do we transfer there now? */
-	    		_e.wax_bucket = quantity;
-	    		_e.wax_to_refund = ZERO_WAX;
-	    		/* redemption starts at the end of the epoch, ends 48h later */
-	    		_e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
-	    		_e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + (60 * 60 * 48);
-	    	});
-	    } else {
-	    	/* TODO: safemath for the addition to wax_bucket */
+	    check(epoch_itr != epochs_t.end(), "error locating epoch");
 
-	    	epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
-	    		_e.wax_bucket += quantity;
-	    	});
-	    }
+    	epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+    		_e.wax_bucket += quantity;
+    	});
+    	*/
 
 	    states.set(s, _self);
 
@@ -156,6 +149,83 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		s.revenue_awaiting_distribution.amount = safeAddInt64(s.revenue_awaiting_distribution.amount, quantity.amount);
   		states.set(s, _self); 
   		return;
+  	}
+
+  	/** cpu rental return
+  	 * 	these are funds coming back from one of the CPU rental contracts after being staked/rented
+  	 */
+
+  	if( memo == "cpu rental return" ){
+  		check( tkcontract == WAX_CONTRACT, "only WAX can be sent with this memo" );
+  		sync_epoch();
+
+  		config c = configs.get();
+  		check( is_cpu_contract(from), "sender is not a valid cpu rental contract" );
+
+  		state s = states.get();
+
+  		/** 
+  		* this SHOULD always belong to last epoch - 2 epochs
+  		* i.e. by the time this arrives from epoch 1,
+  		* it should now be epoch 3
+  		*/
+
+  		uint64_t relevant_epoch = s.last_epoch_start_time - ( c.cpu_rental_epoch_length_seconds * 2 );
+
+  		//look up this epoch
+  		auto epoch_itr = epochs_t.require_find(relevant_epoch, "could not locate relevant epoch");
+
+  		/* TODO: fallback logic to check other epochs and see if a match can be found */
+
+
+  		//make sure the cpu contract is a match
+  		check( epoch_itr->cpu_wallet == from, "sender does not match wallet linked to epoch" );
+
+  		//make sure cpu funds were not returned yet
+  		check( epoch_itr->total_cpu_funds_returned < epoch_itr->wax_bucket, "funds were already returned for this epoch" );
+
+  		//make sure the amount received is the amount expected
+
+
+  		//add the relevant amount to the redemption bucket
+  		asset total_added_to_redemption_bucket = epoch_itr->total_added_to_redemption_bucket;
+  		asset amount_to_send_to_rental_bucket = quantity;
+
+  		if( epoch_itr->total_added_to_redemption_bucket < epoch_itr->wax_to_refund ){
+  			//there are still funds to add to redemption
+  			int64_t amount_added = 0;
+
+  			int64_t amount_remaining_to_add = safeSubInt64(epoch_itr->wax_to_refund.amount, epoch_itr->total_added_to_redemption_bucket.amount);
+
+  			if(amount_remaining_to_add >= quantity.amount){
+  				//the whole quantity will go to the redemption bucket
+  				amount_added = quantity.amount;
+  				
+  			} else {
+  				//only a portion of the amount will go to the redemption bucket
+  				amount_added = amount_remaining_to_add;
+  			}
+
+  			total_added_to_redemption_bucket.amount = safeAddInt64(total_added_to_redemption_bucket.amount, amount_added);
+  			amount_to_send_to_rental_bucket.amount = safeSubInt64(amount_to_send_to_rental_bucket.amount, amount_added);
+  			s.wax_for_redemption.amount = safeAddInt64(s.wax_for_redemption.amount, amount_added);
+  		}
+
+  		//add the remainder to available for rental bucket
+  		if(amount_to_send_to_rental_bucket.amount > 0){
+  			s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, amount_to_send_to_rental_bucket.amount);
+  		}
+
+  		//update cpu funds returned in epoch table
+  		asset total_cpu_funds_returned = epoch_itr->total_cpu_funds_returned;
+  		total_cpu_funds_returned.amount = safeAddInt64(total_cpu_funds_returned.amount, quantity.amount);
+
+  		epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+  			_e.total_cpu_funds_returned = total_cpu_funds_returned;
+  			_e.total_added_to_redemption_bucket = total_added_to_redemption_bucket;
+  		});
+
+  		states.set(s, _self);
   	}
 
 }

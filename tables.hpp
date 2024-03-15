@@ -13,6 +13,8 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
   double                            user_share;
   double                            pol_share;
   std::vector<revenue_receiver>     ecosystem_fund;
+  std::vector<eosio::name>          cpu_contracts;
+  uint64_t                          redemption_period_length_seconds;
 
   EOSLIB_SERIALIZE(config, (minimum_stake_amount)
                             (minimum_unliquify_amount)
@@ -24,6 +26,8 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
                             (user_share)
                             (pol_share)
                             (ecosystem_fund)
+                            (cpu_contracts)
+                            (redemption_period_length_seconds)
                             )
 };
 using config_singleton = eosio::singleton<"config"_n, config>;
@@ -58,6 +62,8 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] epochs {
   eosio::asset      wax_to_refund;
   uint64_t          redemption_period_start_time;
   uint64_t          redemption_period_end_time;
+  eosio::asset      total_cpu_funds_returned;
+  eosio::asset      total_added_to_redemption_bucket;
   
   uint64_t primary_key() const { return start_time; }
 };
@@ -126,6 +132,7 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state {
   uint64_t          last_epoch_start_time;
   eosio::asset      wax_available_for_rentals;
   eosio::asset      cost_to_rent_1_wax;
+  eosio::name       current_cpu_contract;
 
   EOSLIB_SERIALIZE(state, (swax_currently_earning)
                           (swax_currently_backing_lswax)
@@ -140,6 +147,7 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state {
                           (last_epoch_start_time)
                           (wax_available_for_rentals)
                           (cost_to_rent_1_wax)
+                          (current_cpu_contract)
                           )
 };
 using state_singleton = eosio::singleton<"state"_n, state>;
