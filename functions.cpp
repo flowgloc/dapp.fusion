@@ -24,6 +24,11 @@ void fusion::retire_lswax(const int64_t& amount){
   return;
 }
 
+void fusion::retire_swax(const int64_t& amount){
+  action(permission_level{get_self(), "active"_n}, TOKEN_CONTRACT,"retire"_n,std::tuple{ get_self(), eosio::asset(amount, SWAX_SYMBOL), std::string("retiring sWAX for redemption")}).send();
+  return;
+}
+
 void fusion::sync_epoch(){
   //find out when the last epoch started
   state s = states.get();

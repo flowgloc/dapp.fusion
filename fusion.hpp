@@ -64,6 +64,7 @@ CONTRACT fusion : public contract {
 		bool memo_is_expected(const std::string& memo);
 		uint64_t now();
 		void retire_lswax(const int64_t& amount);
+		void retire_swax(const int64_t& amount);
 		void sync_epoch();
 		void sync_user(const eosio::name& user);
 		void transfer_tokens(const name& user, const asset& amount_to_send, const name& contract, const std::string& memo);

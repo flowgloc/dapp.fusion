@@ -11,7 +11,7 @@ ACTION fusion::claimrewards(const eosio::name& user){
 
 	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
 	if(staker->claimable_wax.amount > 0){
-		transfer_tokens( user, staker->claimable_wax, WAX_CONTRACT, std::string("your sWAX reward claim from waxfusion.io") );
+		transfer_tokens( user, staker->claimable_wax, WAX_CONTRACT, std::string("your sWAX reward claim from waxfusion.io - liquid staking protocol") );
 
 		staker_t.modify(staker, same_payer, [&](auto &_s){
 			_s.claimable_wax.amount = 0;
@@ -297,24 +297,50 @@ ACTION fusion::redeem(const eosio::name& user){
 	sync_epoch();
 
 	//find out if there is a current redemption period, and when
+	state s = states.get();
+	config c = configs.get();
+
+	uint64_t redemption_start_time = s.last_epoch_start_time;
+	uint64_t redemption_end_time = s.last_epoch_start_time + (60 * 60 * 48);
+ 
+	check( now() < redemption_end_time, 
+		( "next redemption does not start until " + std::to_string(s.last_epoch_start_time + c.seconds_between_epochs) ).c_str() 
+	);
 
 	//find if the user has a request for this period
+	requests_tbl requests_t = requests_tbl(get_self(), redemption_start_time);
+	auto req_itr = requests_t.require_find(user.value, "you don't have a redemption request for the current redemption period");
 
 	//if they do, make sure the amount is <= their swax amount
+	auto staker = staker_t.require_find(user.value, "you are not staking any sWAX");
+
+	check( req_itr->wax_amount_requested.amount <= staker->swax_balance.amount, "you are trying to redeem more than you have" );
 
 	//make sure s.wax_for_redemption has enough for them (it always should!)
+	check( s.wax_for_redemption >= req_itr->wax_amount_requested, "not enough wax in the redemption pool" );
 
 	//subtract the amount from s.wax_for_redemption
+	s.wax_for_redemption.amount = safeSubInt64(s.wax_for_redemption.amount, req_itr->wax_amount_requested.amount);
 
 	//subtract the requested amount from their swax balance
+	asset updated_swax_balance = staker->swax_balance;
+	updated_swax_balance.amount = safeSubInt64(updated_swax_balance.amount, req_itr->wax_amount_requested.amount);
+
+	staker_t.modify(staker, same_payer, [&](auto &_s){
+		_s.swax_balance = updated_swax_balance;
+	});
 
 	//retire the sWAX
+	retire_swax(req_itr->wax_amount_requested.amount);
 
 	//update the swax_currently_earning amount
+	s.swax_currently_earning.amount = safeSubInt64(s.swax_currently_earning.amount, req_itr->wax_amount_requested.amount);
 
 	//transfer wax to the user
+	transfer_tokens( user, req_itr->wax_amount_requested, WAX_CONTRACT, std::string("your sWAX redemption from waxfusion.io - liquid staking protocol") );
 
 	//erase the request
+	req_itr = requests_t.erase(req_itr);
 }
 
 
