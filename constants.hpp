@@ -20,8 +20,11 @@ static const eosio::asset ZERO_SWAX = eosio::asset(0, SWAX_SYMBOL);
 static const eosio::asset ZERO_WAX = eosio::asset(0, WAX_SYMBOL);
 
 //Other
-static constexpr uint64_t INITIAL_EPOCH_START_TIMESTAMP = 1710460800; /* 3/15/2024 00:00:00 GMT */
 static constexpr eosio::name FALLBACK_CPU_RECEIVER = "updatethings"_n;
+static constexpr uint64_t INITIAL_EPOCH_START_TIMESTAMP = 1710460800; /* 3/15/2024 00:00:00 GMT */
+static constexpr uint64_t MAXIMUM_WAX_TO_RENT = 10000000; /* 10 Million WAX */
+static constexpr uint64_t MINIMUM_WAX_TO_RENT = 10; /* 10 WAX */
+
 
 //Errors
 static const char* ERR_CONFIG_NOT_FOUND = "could not locate config";

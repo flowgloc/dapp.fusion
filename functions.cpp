@@ -4,6 +4,17 @@ std::string fusion::cpu_stake_memo(const eosio::name& cpu_receiver, const uint64
   return ("|stake_cpu|" + cpu_receiver.to_string() + "|" + std::to_string(epoch_timestamp) + "|").c_str();
 }
 
+std::vector<std::string> fusion::get_words(std::string memo){
+  std::string delim = "|";
+  std::vector<std::string> words{};
+  size_t pos = 0;
+  while ((pos = memo.find(delim)) != std::string::npos) {
+    words.push_back(memo.substr(0, pos));
+    memo.erase(0, pos + delim.length());
+  }
+  return words;
+}
+
 bool fusion::is_cpu_contract(const eosio::name& contract){
   config c = configs.get();
 
@@ -29,7 +40,10 @@ bool fusion::memo_is_expected(const std::string& memo){
     return true;
   }
 
-  if(memo.find("rent_cpu") != std::string::npos){
+  std::string memo_copy = memo;
+  std::vector<std::string> words = get_words(memo_copy);
+
+  if( words[1] == "rent_cpu" ){
       return true;
   }  
 
@@ -105,7 +119,7 @@ void fusion::sync_epoch(){
         _e.total_cpu_funds_returned = ZERO_WAX;
         _e.total_added_to_redemption_bucket = ZERO_WAX;
       });
-      
+
     }
   }
 

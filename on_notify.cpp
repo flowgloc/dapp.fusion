@@ -229,13 +229,104 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   	}
 
   	/**
+  	* @get_words
+  	* anything below here should be a dynamic memo with multiple words to parse
+  	*/
+
+  	std::vector<std::string> words = get_words(memo);
+
+  	/**
   	* rent_cpu
   	* if it has this, we need to parse it and find out which epoch, and who to rent to
   	*/ 
 
-  	if( memo.find("rent_cpu") != std::string::npos ){
+  	if( words[1] == "rent_cpu" ){
   		check( tkcontract == WAX_CONTRACT, "only WAX can be sent with this memo" );
+  		sync_epoch();
 
+  		//memo should also include account to rent to 
+  		const eosio::name cpu_receiver = eosio::name( words[2] );
+  		check( is_account( cpu_receiver ), ( cpu_receiver.to_string() + " is not an account" ).c_str() );
+
+  		//memo should also include amount of wax to rent
+  		const uint64_t wax_amount_to_rent = std::strtoull( words[3].c_str(), NULL, 0 );
+
+  		//that amount should be > min_rental
+  		check( wax_amount_to_rent >= MINIMUM_WAX_TO_RENT, ( "minimum wax amount to rent is " + std::to_string( MINIMUM_WAX_TO_RENT ) ).c_str() );
+  		check( wax_amount_to_rent <= MAXIMUM_WAX_TO_RENT, ( "maximum wax amount to rent is " + std::to_string( MAXIMUM_WAX_TO_RENT ) ).c_str() );
+
+  		//memo should include an epoch ID
+  		const uint64_t epoch_id_to_rent_from = std::strtoull( words[4].c_str(), NULL, 0 );
+
+  		//check that the epoch exists
+  		auto epoch_itr = epochs_t.require_find( epoch_id_to_rent_from, ("epoch " + std::to_string(epoch_id_to_rent_from) + " does not exist").c_str() );
+
+  		state s = states.get();
+  		config c = configs.get();
+
+  		/* TODO: Add safety checks for multiplying uint64_t */
+  		const uint64_t amount_to_rent_with_precision = 100000000 * wax_amount_to_rent;
+
+  		//make sure there is anough wax available for this rental
+  		check( s.wax_available_for_rentals.amount >= amount_to_rent_with_precision, "there is not enough wax in the rental pool to cover this rental" );
+
+  		//debit the wax from the rental pool
+  		s.wax_available_for_rentals.amount = safeSubInt64(s.wax_available_for_rentals.amount, amount_to_rent_with_precision);
+
+  		uint64_t eleven_days = 60 * 60 * 24 * 11;
+  		double seconds_into_current_epoch = (double) now() - (double) s.last_epoch_start_time;
+  		double days_into_current_epoch = safeDivDouble( seconds_into_current_epoch, (60 * 60 * 24) );
+  		double days_to_rent;
+
+  		if( epoch_id_to_rent_from == s.last_epoch_start_time + c.seconds_between_epochs ){
+  			//renting from epoch 3 (hasnt started yet)
+  			days_to_rent = 18 - days_into_current_epoch;
+
+  		} else if( epoch_id_to_rent_from == s.last_epoch_start_time ){
+  			//renting from epoch 2 (started most recently)
+  			days_to_rent = 11 - days_into_current_epoch;
+
+  		} else if( epoch_id_to_rent_from == s.last_epoch_start_time - c.seconds_between_epochs ){
+  			//renting from epoch 1 (oldest) and we need to make sure it's less than 11 days old
+  			check( epoch_itr->time_to_unstake > now(), "it is too late to rent from this epoch, please rent from the next one" );
+  			//check( days_into_current_epoch < 4, "it is too late to rent from this epoch, please rent from the next one" );
+
+  			//if we reached here, minimum PAYMENT is 1 full day payment (even if rental is less than 1 day)
+  			days_to_rent = 4 - days_into_current_epoch < 1 ? 1 : 4 - days_into_current_epoch;
+
+  		} else{
+  			check( false, "you are trying to rent from an invalid epoch" );
+  		}
+
+  		double expected_amount_received = (double) s.cost_to_rent_1_wax.amount * (double) wax_amount_to_rent * days_to_rent;
+
+  		double amount_received_double = (double) quantity.amount;
+
+  		check( amount_received_double >= expected_amount_received, ("expected to receive " + std::to_string(expected_amount_received) + " WAX" ).c_str() );
+
+  		//if they sent more than expected, calculate difference and refund it
+  		if( amount_received_double > expected_amount_received ){
+  			//calculate difference
+  			double amount_to_refund = amount_received_double - expected_amount_received;
+
+  			if( (int64_t) amount_to_refund > 0 ){
+  				transfer_tokens( from, asset(amount_to_refund, WAX_SYMBOL), WAX_CONTRACT, "cpu rental refund from waxfusion.io - liquid staking protocol" );
+  			}
+  		}
+
+  		//send funds to the cpu contract
+  		transfer_tokens( epoch_itr->cpu_wallet, asset( (int64_t) amount_to_rent_with_precision, WAX_SYMBOL), WAX_CONTRACT, cpu_stake_memo(cpu_receiver, epoch_id_to_rent_from) );
+
+  		//update the epoch's wax_bucket
+  		asset epoch_wax_bucket = epoch_itr->wax_bucket;
+  		epoch_wax_bucket.amount = safeAddInt64(epoch_wax_bucket.amount, (int64_t) amount_to_rent_with_precision);
+
+  		epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+  			_e.wax_bucket = epoch_wax_bucket;
+  		});
+
+  		//update the state
+  		states.set(s, _self);
   	}
 
 }

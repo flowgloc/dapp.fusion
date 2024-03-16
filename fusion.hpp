@@ -60,6 +60,7 @@ CONTRACT fusion : public contract {
 
 		//Functions
 		std::string cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp);
+		std::vector<std::string> get_words(std::string memo);
 		bool is_cpu_contract(const eosio::name& contract);
 		void issue_lswax(const int64_t& amount, const eosio::name& receiver);
 		void issue_swax(const int64_t& amount);
