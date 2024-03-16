@@ -30,6 +30,7 @@ CONTRACT fusion : public contract {
 		{}		
 
 		//Main Actions
+		ACTION addadmin(const eosio::name& admin_to_add);
 		ACTION claimrewards(const eosio::name& user);
 		ACTION distribute();
 		ACTION initconfig();
@@ -37,6 +38,8 @@ CONTRACT fusion : public contract {
 		ACTION reallocate();
 		ACTION redeem(const eosio::name& user);
 		ACTION reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
+		ACTION setfallback(const eosio::name& caller, const eosio::name& receiver);
+		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);
 		ACTION stake(const eosio::name& user);
 		ACTION stakeallcpu();
 
@@ -61,6 +64,7 @@ CONTRACT fusion : public contract {
 		//Functions
 		std::string cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp);
 		std::vector<std::string> get_words(std::string memo);
+		bool is_an_admin(const eosio::name& user);
 		bool is_cpu_contract(const eosio::name& contract);
 		void issue_lswax(const int64_t& amount, const eosio::name& receiver);
 		void issue_swax(const int64_t& amount);

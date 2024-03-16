@@ -15,6 +15,25 @@ std::vector<std::string> fusion::get_words(std::string memo){
   return words;
 }
 
+/**
+* is_an_admin
+* this contract is multisig and all of the most important features will require msig
+* there will be some features that do not pose any major risk to users/funds
+* in which case, just having a few "admin" accounts who can call certain actions will be sufficient
+* rather than needing to organize an msig with multiple parties over a minor adjustment
+* e.g. - adjusting the cost for renting CPU or adjusting the fallback_cpu_receiver etc
+*/
+
+bool fusion::is_an_admin(const eosio::name& user){
+  config c = configs.get();
+
+  if( std::find(c.admin_wallets.begin(), c.admin_wallets.end(), user) != c.admin_wallets.end() ){
+    return true;
+  }
+
+  return false;
+}
+
 bool fusion::is_cpu_contract(const eosio::name& contract){
   config c = configs.get();
 

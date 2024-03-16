@@ -3,6 +3,21 @@
 #include "safe.cpp"
 #include "on_notify.cpp"
 
+ACTION fusion::addadmin(const eosio::name& admin_to_add){
+	require_auth(_self);
+	check( is_account(admin_to_add), "admin_to_add is not a wax account" );
+
+	config c = configs.get();
+
+	if( std::find( c.admin_wallets.begin(), c.admin_wallets.end(), admin_to_add ) == c.admin_wallets.end() ){
+		c.admin_wallets.push_back( admin_to_add );
+	} else {
+		check( false, ( admin_to_add.to_string() + " is already an admin" ).c_str() );
+	}
+
+	configs.set(c, _self);
+}
+
 ACTION fusion::claimrewards(const eosio::name& user){
 	/* converting a % to powerup should be bundled in on the front end (i.e. ignored here) */
 
@@ -199,6 +214,12 @@ ACTION fusion::initconfig(){
 		{"taco"_n, eco_split },
 		{"alcor"_n, eco_split }
 	};
+	c.admin_wallets = {
+		"guild.waxdao"_n,
+		"oig"_n,
+		_self
+		//"admin.wax"_n
+	};
 	c.cpu_contracts = {
 		"cpu1.fusion"_n,
 		"cpu2.fusion"_n,
@@ -206,6 +227,7 @@ ACTION fusion::initconfig(){
 	};
 	c.redemption_period_length_seconds = 60 * 60 * 24 * 2; /* 2 days */
 	c.seconds_between_stakeall = 60 * 60 * 24; /* once per day */
+	c.fallback_cpu_receiver = "updatethings"_n;
 	configs.set(c, _self);
 
 	state s{};
@@ -502,6 +524,27 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 
 }
 
+ACTION fusion::setfallback(const eosio::name& caller, const eosio::name& receiver){
+	require_auth(caller);
+	check( is_an_admin(caller), "this action requires auth from one of the admin_wallets in the config table" );
+	check( is_account(receiver), "cpu receiver is not a wax account" );
+
+	config c = configs.get();
+	c.fallback_cpu_receiver = receiver;
+	configs.set(c, _self);
+}
+
+ACTION fusion::setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax){
+	require_auth(caller);
+	check( is_an_admin(caller), "this action requires auth from one of the admin_wallets in the config table" );
+	check( cost_to_rent_1_wax.amount > 0, "cost must be positive" );
+	check( cost_to_rent_1_wax.symbol == WAX_SYMBOL, "symbol and precision must match WAX" );
+
+	state s = states.get();
+	s.cost_to_rent_1_wax = cost_to_rent_1_wax;
+	states.set(s, _self);
+}
+
 ACTION fusion::stake(const eosio::name& user){
 	require_auth(user);
 
@@ -585,7 +628,7 @@ ACTION fusion::stakeallcpu(){
 			check( epoch_itr->total_cpu_funds_returned >= epoch_itr->wax_bucket, (next_cpu_contract.to_string() + " still has funds tied up").c_str() );
 		}
 
-		transfer_tokens( s.current_cpu_contract, s.wax_available_for_rentals, WAX_CONTRACT, cpu_stake_memo(FALLBACK_CPU_RECEIVER, next_epoch_start_time) );
+		transfer_tokens( s.current_cpu_contract, s.wax_available_for_rentals, WAX_CONTRACT, cpu_stake_memo(c.fallback_cpu_receiver, next_epoch_start_time) );
 
 		//upsert the epoch that it was staked to, so it reflects the added wax
 		auto next_epoch_itr = epochs_t.find(next_epoch_start_time);

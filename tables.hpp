@@ -13,9 +13,11 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
   double                            user_share;
   double                            pol_share;
   std::vector<revenue_receiver>     ecosystem_fund;
+  std::vector<eosio::name>          admin_wallets;
   std::vector<eosio::name>          cpu_contracts;
   uint64_t                          redemption_period_length_seconds;
   uint64_t                          seconds_between_stakeall;
+  eosio::name                       fallback_cpu_receiver;
 
   EOSLIB_SERIALIZE(config, (minimum_stake_amount)
                             (minimum_unliquify_amount)
@@ -27,9 +29,11 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
                             (user_share)
                             (pol_share)
                             (ecosystem_fund)
+                            (admin_wallets)
                             (cpu_contracts)
                             (redemption_period_length_seconds)
                             (seconds_between_stakeall)
+                            (fallback_cpu_receiver)
                             )
 };
 using config_singleton = eosio::singleton<"config"_n, config>;
