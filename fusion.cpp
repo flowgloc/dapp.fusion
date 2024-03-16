@@ -11,11 +11,24 @@ ACTION fusion::addadmin(const eosio::name& admin_to_add){
 
 	if( std::find( c.admin_wallets.begin(), c.admin_wallets.end(), admin_to_add ) == c.admin_wallets.end() ){
 		c.admin_wallets.push_back( admin_to_add );
+		configs.set(c, _self);
 	} else {
 		check( false, ( admin_to_add.to_string() + " is already an admin" ).c_str() );
 	}
+}
 
-	configs.set(c, _self);
+ACTION fusion::addcpucntrct(const eosio::name& contract_to_add){
+	require_auth(_self);
+	check( is_account(contract_to_add), "contract_to_add is not a wax account" );
+
+	config c = configs.get();
+
+	if( std::find( c.cpu_contracts.begin(), c.cpu_contracts.end(), contract_to_add ) == c.cpu_contracts.end() ){
+		c.cpu_contracts.push_back( contract_to_add );
+		configs.set(c, _self);
+	} else {
+		check( false, ( contract_to_add.to_string() + " is already a cpu contract" ).c_str() );
+	}
 }
 
 ACTION fusion::claimrewards(const eosio::name& user){
@@ -375,6 +388,21 @@ ACTION fusion::redeem(const eosio::name& user){
 }
 
 
+ACTION fusion::removeadmin(const eosio::name& admin_to_remove){
+	require_auth(_self);
+
+	config c = configs.get();
+
+    auto itr = std::remove(c.admin_wallets.begin(), c.admin_wallets.end(), admin_to_remove);
+
+    if (itr != c.admin_wallets.end()) {
+        c.admin_wallets.erase(itr, c.admin_wallets.end());
+        configs.set(c, _self);
+    } else {
+        check(false, (admin_to_remove.to_string() + " is not an admin").c_str());
+    }
+}
+
 /**
 * reqredeem (request redeem)
 * initiates a redemption request
@@ -522,6 +550,21 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 
 	check( request_can_be_filled, "There is not enough wax available to fill this request yet" );
 
+}
+
+ACTION fusion::rmvcpucntrct(const eosio::name& contract_to_remove){
+	require_auth(_self);
+
+	config c = configs.get();
+
+    auto itr = std::remove(c.cpu_contracts.begin(), c.cpu_contracts.end(), contract_to_remove);
+
+    if (itr != c.cpu_contracts.end()) {
+        c.cpu_contracts.erase(itr, c.cpu_contracts.end());
+        configs.set(c, _self);
+    } else {
+        check(false, (contract_to_remove.to_string() + " is not a cpu contract").c_str());
+    }
 }
 
 ACTION fusion::setfallback(const eosio::name& caller, const eosio::name& receiver){

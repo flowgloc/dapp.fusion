@@ -31,13 +31,16 @@ CONTRACT fusion : public contract {
 
 		//Main Actions
 		ACTION addadmin(const eosio::name& admin_to_add);
+		ACTION addcpucntrct(const eosio::name& contract_to_add);
 		ACTION claimrewards(const eosio::name& user);
 		ACTION distribute();
 		ACTION initconfig();
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
 		ACTION reallocate();
 		ACTION redeem(const eosio::name& user);
+		ACTION removeadmin(const eosio::name& admin_to_remove);
 		ACTION reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
+		ACTION rmvcpucntrct(const eosio::name& contract_to_remove);
 		ACTION setfallback(const eosio::name& caller, const eosio::name& receiver);
 		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);
 		ACTION stake(const eosio::name& user);
