@@ -3,6 +3,7 @@
 #include "safe.cpp"
 #include "on_notify.cpp"
 
+
 ACTION fusion::addadmin(const eosio::name& admin_to_add){
 	require_auth(_self);
 	check( is_account(admin_to_add), "admin_to_add is not a wax account" );
@@ -204,10 +205,10 @@ ACTION fusion::distribute(){
 ACTION fusion::initconfig(){
 	require_auth(get_self());
 
-	eosio::check(!configs.exists(), "Config already exists");
-	eosio::check(!states.exists(), "State already exists");
+	//eosio::check(!configs.exists(), "Config already exists");
+	//eosio::check(!states.exists(), "State already exists");
 
-	double eco_split = 1 / 6;
+	double eco_split = (double) 1 / (double) 6;
 
 	config c{};
 	c.minimum_stake_amount = eosio::asset(100000000, WAX_SYMBOL);
@@ -257,8 +258,25 @@ ACTION fusion::initconfig(){
 	s.last_epoch_start_time = INITIAL_EPOCH_START_TIMESTAMP;
 	s.wax_available_for_rentals = ZERO_WAX;
 	s.cost_to_rent_1_wax = asset(1000000, WAX_SYMBOL); /* 0.01 WAX per day */
+	s.current_cpu_contract = "cpu1.fusion"_n;
 	s.next_stakeall_time = INITIAL_EPOCH_START_TIMESTAMP + 60 * 60 * 24; /* 1 day */
 	states.set(s, _self);
+
+	//create the first epoch
+
+	epochs_t.emplace(get_self(), [&](auto &_e){
+		_e.start_time = INITIAL_EPOCH_START_TIMESTAMP;
+		/* unstake 3 days before epoch ends */
+		_e.time_to_unstake = INITIAL_EPOCH_START_TIMESTAMP + (60 * 60 * 24 * 14) - (60 * 60 * 24 * 3);
+		_e.cpu_wallet = "cpu1.fusion"_n;
+		_e.wax_bucket = ZERO_WAX;
+		_e.wax_to_refund = ZERO_WAX;
+		/* redemption starts at the end of the epoch, ends 48h later */
+		_e.redemption_period_start_time = INITIAL_EPOCH_START_TIMESTAMP + (60 * 60 * 24 * 14);
+		_e.redemption_period_end_time = INITIAL_EPOCH_START_TIMESTAMP + (60 * 60 * 24 * 16);
+		_e.total_cpu_funds_returned = ZERO_WAX;
+		_e.total_added_to_redemption_bucket = ZERO_WAX;
+	});	
 }
 
 ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
@@ -287,7 +305,15 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 	state s = states.get();
 
 	//calculate equivalent amount of lsWAX (BEFORE adjusting sWAX amounts)
-	double lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
+	double lsWAX_per_sWAX;
+
+	//need to account for initial period where the values are still 0
+	if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
+		lsWAX_per_sWAX = (double) 1;
+	} else {
+		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
+	}
+
 	double converted_lsWAX_amount = lsWAX_per_sWAX * (double) quantity.amount;
 	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
 
@@ -647,7 +673,7 @@ ACTION fusion::stakeallcpu(){
 			if( cpu == s.current_cpu_contract ){
 			  contract_was_found = true;
 
-			  if(next_cpu_index < c.cpu_contracts.size()){
+			  if(next_cpu_index == c.cpu_contracts.size()){
 			    next_cpu_index = 0;
 			  }
 			}

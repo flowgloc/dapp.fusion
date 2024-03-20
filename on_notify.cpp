@@ -114,6 +114,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   		//debit the amount from liquified sWAX
   		s.liquified_swax.amount = safeSubInt64(s.liquified_swax.amount, converted_sWAX_i64);
+  		s.swax_currently_backing_lswax.amount = safeSubInt64(s.swax_currently_backing_lswax.amount, converted_sWAX_i64);
 
   		//add this amount to the "currently_earning" sWAX bucket
   		s.swax_currently_earning.amount = safeAddInt64(s.swax_currently_earning.amount, converted_sWAX_i64);

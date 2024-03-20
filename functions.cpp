@@ -96,7 +96,7 @@ void fusion::sync_epoch(){
     if( cpu == s.current_cpu_contract ){
       contract_was_found = true;
 
-      if(next_cpu_index < c.cpu_contracts.size()){
+      if(next_cpu_index == c.cpu_contracts.size()){
         next_cpu_index = 0;
       }
     }
@@ -107,7 +107,7 @@ void fusion::sync_epoch(){
 
   check( contract_was_found, "error locating cpu contract" );
   eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
-  check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
+  check( next_cpu_contract != s.current_cpu_contract, "next cpu contract cant be the same as the current contract" );
 
   //calculate when the next is supposed to start
   uint64_t next_epoch_start_time = s.last_epoch_start_time += c.seconds_between_epochs;
