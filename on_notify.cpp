@@ -259,9 +259,6 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		//memo should include an epoch ID
   		const uint64_t epoch_id_to_rent_from = std::strtoull( words[4].c_str(), NULL, 0 );
 
-  		//check that the epoch exists
-  		auto epoch_itr = epochs_t.require_find( epoch_id_to_rent_from, ("epoch " + std::to_string(epoch_id_to_rent_from) + " does not exist").c_str() );
-
   		state s = states.get();
   		config c = configs.get();
 
@@ -276,24 +273,68 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   		uint64_t eleven_days = 60 * 60 * 24 * 11;
   		double seconds_into_current_epoch = (double) now() - (double) s.last_epoch_start_time;
-  		double days_into_current_epoch = safeDivDouble( seconds_into_current_epoch, (60 * 60 * 24) );
+  		double days_into_current_epoch = safeDivDouble( seconds_into_current_epoch, ( (double) 60 * (double) 60 * (double) 24) );
   		double days_to_rent;
 
   		if( epoch_id_to_rent_from == s.last_epoch_start_time + c.seconds_between_epochs ){
   			//renting from epoch 3 (hasnt started yet)
-  			days_to_rent = 18 - days_into_current_epoch;
+  			days_to_rent = (double) 18 - days_into_current_epoch;
+
+  			//see if this epoch exists yet - if it doesn't, create it
+  			auto next_epoch_itr = epochs_t.find( epoch_id_to_rent_from );
+
+  			if( next_epoch_itr == epochs_t.end() ){
+
+  				uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
+
+				int next_cpu_index = 1;
+				bool contract_was_found = false;
+
+				for(eosio::name cpu : c.cpu_contracts){
+
+					if( cpu == s.current_cpu_contract ){
+					  contract_was_found = true;
+
+					  if(next_cpu_index == c.cpu_contracts.size()){
+					    next_cpu_index = 0;
+					  }
+					}
+
+					if(contract_was_found) break;
+					next_cpu_index ++;
+				}
+
+				check( contract_was_found, "error locating cpu contract" );
+				eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
+				check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
+
+
+  				epochs_t.emplace(_self, [&](auto &_e){
+					_e.start_time = next_epoch_start_time;
+					/* unstake 3 days before epoch ends */
+					_e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
+					_e.cpu_wallet = next_cpu_contract;
+					_e.wax_bucket = ZERO_WAX;
+					_e.wax_to_refund = ZERO_WAX;
+					/* redemption starts at the end of the epoch, ends 48h later */
+					_e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
+					_e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + c.redemption_period_length_seconds;
+					_e.total_cpu_funds_returned = ZERO_WAX;
+					_e.total_added_to_redemption_bucket = ZERO_WAX;
+  				});
+  			}
 
   		} else if( epoch_id_to_rent_from == s.last_epoch_start_time ){
   			//renting from epoch 2 (started most recently)
-  			days_to_rent = 11 - days_into_current_epoch;
+  			days_to_rent = (double) 11 - days_into_current_epoch;
 
   		} else if( epoch_id_to_rent_from == s.last_epoch_start_time - c.seconds_between_epochs ){
   			//renting from epoch 1 (oldest) and we need to make sure it's less than 11 days old
-  			check( epoch_itr->time_to_unstake > now(), "it is too late to rent from this epoch, please rent from the next one" );
-  			//check( days_into_current_epoch < 4, "it is too late to rent from this epoch, please rent from the next one" );
+  			//check( epoch_itr->time_to_unstake > now(), "it is too late to rent from this epoch, please rent from the next one" );
+  			check( days_into_current_epoch < (double) 4, "it is too late to rent from this epoch, please rent from the next one" );
 
   			//if we reached here, minimum PAYMENT is 1 full day payment (even if rental is less than 1 day)
-  			days_to_rent = 4 - days_into_current_epoch < 1 ? 1 : 4 - days_into_current_epoch;
+  			days_to_rent = (double) 4 - days_into_current_epoch < (double) 1 ? (double) 1 : (double) 4 - days_into_current_epoch;
 
   		} else{
   			check( false, "you are trying to rent from an invalid epoch" );
@@ -302,6 +343,15 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		double expected_amount_received = (double) s.cost_to_rent_1_wax.amount * (double) wax_amount_to_rent * days_to_rent;
 
   		double amount_received_double = (double) quantity.amount;
+
+  		debug_t.emplace(_self, [&](auto &_d){
+  			_d.ID = debug_t.available_primary_key();
+  			_d.message = std::string(cpu_receiver.to_string() + " should get " + std::to_string(wax_amount_to_rent) + " WAX for " + std::to_string(days_to_rent) + " days."
+  				+ " Amount received was " + std::to_string(amount_received_double) + " without factoring precision. Amount expected was " +  std::to_string(expected_amount_received) + " WAX."
+  				);
+  		});
+
+  		//return;
 
   		check( amount_received_double >= expected_amount_received, ("expected to receive " + std::to_string(expected_amount_received) + " WAX" ).c_str() );
 
@@ -314,6 +364,8 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   				transfer_tokens( from, asset(amount_to_refund, WAX_SYMBOL), WAX_CONTRACT, "cpu rental refund from waxfusion.io - liquid staking protocol" );
   			}
   		}
+
+  		auto epoch_itr = epochs_t.require_find( epoch_id_to_rent_from, ("epoch " + std::to_string(epoch_id_to_rent_from) + " does not exist").c_str() );
 
   		//send funds to the cpu contract
   		transfer_tokens( epoch_itr->cpu_wallet, asset( (int64_t) amount_to_rent_with_precision, WAX_SYMBOL), WAX_CONTRACT, cpu_stake_memo(cpu_receiver, epoch_id_to_rent_from) );

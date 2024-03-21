@@ -39,6 +39,16 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
 using config_singleton = eosio::singleton<"config"_n, config>;
 
 
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] debug {
+  uint64_t      ID;
+  std::string   message;
+  
+  uint64_t primary_key() const { return ID; }
+};
+using debug_table = eosio::multi_index<"debug"_n, debug
+>;
+
+
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] ecosystem {
   eosio::name                   beneficiary;
   eosio::asset                  wax_balance;

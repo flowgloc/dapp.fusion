@@ -58,6 +58,7 @@ CONTRACT fusion : public contract {
 		state_singleton states;
 
 		//Multi Index Tables
+		debug_table debug_t = debug_table(get_self(), get_self().value);
 		eco_table eco_t = eco_table(get_self(), get_self().value);
 		epochs_table epochs_t = epochs_table(get_self(), get_self().value);
 		snaps_table snaps_t = snaps_table(get_self(), get_self().value);
