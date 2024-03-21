@@ -743,3 +743,65 @@ ACTION fusion::stakeallcpu(){
 
 	states.set(s, _self);
 }
+
+ACTION fusion::vote(){
+
+	auto idx = _producers.get_index<"prototalvote"_n>();	
+
+	using value_type = std::pair<eosio::producer_authority, uint16_t>;
+	std::vector< value_type > top_producers;
+	top_producers.reserve(21);	
+
+	for( auto it = idx.cbegin(); it != idx.cend() && top_producers.size() < 21 && 0 < it->total_votes && it->active(); ++it ) {
+		top_producers.emplace_back(
+			eosio::producer_authority{
+			   .producer_name = it->owner,
+			   .authority     = it->get_producer_authority()
+			},
+			it->location
+		);
+	}
+
+	if( top_producers.size() < MINIMUM_PRODUCERS_TO_VOTE_FOR ) {
+		check( false, ("attempting to vote for " + std::to_string( top_producers.size() ) + " producers but need to vote for " + std::to_string( MINIMUM_PRODUCERS_TO_VOTE_FOR ) ).c_str() );
+	}	
+
+	std::sort(top_producers.begin(), top_producers.end(),
+	    [](const value_type& a, const value_type& b) -> bool {
+	        return a.first.producer_name.to_string() < b.first.producer_name.to_string();
+	    }
+	);	
+
+	std::vector<eosio::name> producers_to_vote_for {};
+
+	for(auto t : top_producers){
+		producers_to_vote_for.push_back(t.first.producer_name);
+	}
+
+	/*
+	std::string debug_message = "voting for: ";
+	int count = 0;
+	for (const auto& p : producers_to_vote_for) {
+	    if (count != 0) {
+	        debug_message += ", ";
+	    }
+	    debug_message += p.to_string();
+	    count ++;
+	}	
+
+	debug_t.emplace(_self, [&](auto &_d){
+		_d.ID = debug_t.available_primary_key();
+		_d.message = debug_message;
+	});
+	*/
+	
+	config c = configs.get();
+
+	for(eosio::name ctrct : c.cpu_contracts){
+		del_bandwidth_table del_tbl( SYSTEM_CONTRACT, ctrct.value );
+
+		if( del_tbl.begin() != del_tbl.end() ){
+			action(permission_level{get_self(), "active"_n}, ctrct,"vote"_n,std::tuple{ producers_to_vote_for }).send();
+		}
+	}
+}

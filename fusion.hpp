@@ -48,6 +48,7 @@ CONTRACT fusion : public contract {
 		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);
 		ACTION stake(const eosio::name& user);
 		ACTION stakeallcpu();
+		ACTION vote();
 
 
 		//Notifications
@@ -65,6 +66,7 @@ CONTRACT fusion : public contract {
 		eco_table eco_t = eco_table(get_self(), get_self().value);
 		epochs_table epochs_t = epochs_table(get_self(), get_self().value);
 		snaps_table snaps_t = snaps_table(get_self(), get_self().value);
+		producers_table _producers = producers_table(SYSTEM_CONTRACT, SYSTEM_CONTRACT.value);
 		staker_table staker_t = staker_table(get_self(), get_self().value);
 
 
