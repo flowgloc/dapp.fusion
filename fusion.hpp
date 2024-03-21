@@ -12,6 +12,8 @@
 #include <eosio/crypto.hpp>
 #include <eosio/transaction.hpp>
 #include <eosio/singleton.hpp>
+#include <eosio/binary_extension.hpp>
+#include <eosio/producer_schedule.hpp>
 #include<map>
 #include "structs.hpp"
 #include "constants.hpp"
@@ -32,6 +34,7 @@ CONTRACT fusion : public contract {
 		//Main Actions
 		ACTION addadmin(const eosio::name& admin_to_add);
 		ACTION addcpucntrct(const eosio::name& contract_to_add);
+		ACTION claimgbmvote(const eosio::name& cpu_contract);
 		ACTION claimrewards(const eosio::name& user);
 		ACTION distribute();
 		ACTION initconfig();

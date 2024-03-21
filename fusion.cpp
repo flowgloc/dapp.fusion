@@ -32,6 +32,12 @@ ACTION fusion::addcpucntrct(const eosio::name& contract_to_add){
 	}
 }
 
+ACTION fusion::claimgbmvote(const eosio::name& cpu_contract)
+{
+	check( is_cpu_contract(cpu_contract), ( cpu_contract.to_string() + " is not a cpu rental contract").c_str() );
+	action(permission_level{get_self(), "active"_n}, cpu_contract,"claimgbmvote"_n,std::tuple{}).send();
+}
+
 ACTION fusion::claimrewards(const eosio::name& user){
 	/* converting a % to powerup should be bundled in on the front end (i.e. ignored here) */
 
@@ -205,8 +211,8 @@ ACTION fusion::distribute(){
 ACTION fusion::initconfig(){
 	require_auth(get_self());
 
-	//eosio::check(!configs.exists(), "Config already exists");
-	//eosio::check(!states.exists(), "State already exists");
+	eosio::check(!configs.exists(), "Config already exists");
+	eosio::check(!states.exists(), "State already exists");
 
 	double eco_split = (double) 1 / (double) 6;
 
@@ -278,6 +284,7 @@ ACTION fusion::initconfig(){
 		_e.total_added_to_redemption_bucket = ZERO_WAX;
 	});	
 }
+
 
 ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 	require_auth(user);
