@@ -38,6 +38,29 @@ ACTION fusion::claimgbmvote(const eosio::name& cpu_contract)
 	action(permission_level{get_self(), "active"_n}, cpu_contract,"claimgbmvote"_n,std::tuple{}).send();
 }
 
+ACTION fusion::claimrefunds()
+{
+	//anyone can call this
+
+	config c = configs.get();
+
+	bool refundsToClaim = false;
+
+	for(eosio::name ctrct : c.cpu_contracts){
+		refunds_table refunds_t = refunds_table( SYSTEM_CONTRACT, ctrct.value );
+
+		auto refund_itr = refunds_t.find( ctrct.value );
+
+		if( refund_itr != refunds_t.end() && refund_itr->request_time + seconds(REFUND_DELAY_SEC) <= current_time_point() ){
+			action(permission_level{get_self(), "active"_n}, ctrct,"claimrefund"_n,std::tuple{}).send();
+			refundsToClaim = true;
+		}
+
+	}
+
+	check( refundsToClaim, "there are no refunds to claim" );
+}
+
 ACTION fusion::claimrewards(const eosio::name& user){
 	/* converting a % to powerup should be bundled in on the front end (i.e. ignored here) */
 
@@ -283,6 +306,50 @@ ACTION fusion::initconfig(){
 		_e.total_cpu_funds_returned = ZERO_WAX;
 		_e.total_added_to_redemption_bucket = ZERO_WAX;
 	});	
+}
+
+ACTION fusion::inittop21(){
+	require_auth(get_self());
+
+	eosio::check(!top21_s.exists(), "top21 already exists");
+
+	auto idx = _producers.get_index<"prototalvote"_n>();	
+
+	using value_type = std::pair<eosio::producer_authority, uint16_t>;
+	std::vector< value_type > top_producers;
+	top_producers.reserve(21);	
+
+	for( auto it = idx.cbegin(); it != idx.cend() && top_producers.size() < 21 && 0 < it->total_votes && it->active(); ++it ) {
+		top_producers.emplace_back(
+			eosio::producer_authority{
+			   .producer_name = it->owner,
+			   .authority     = it->get_producer_authority()
+			},
+			it->location
+		);
+	}
+
+	if( top_producers.size() < MINIMUM_PRODUCERS_TO_VOTE_FOR ) {
+		check( false, ("attempting to vote for " + std::to_string( top_producers.size() ) + " producers but need to vote for " + std::to_string( MINIMUM_PRODUCERS_TO_VOTE_FOR ) ).c_str() );
+	}	
+
+	std::sort(top_producers.begin(), top_producers.end(),
+	    [](const value_type& a, const value_type& b) -> bool {
+	        return a.first.producer_name.to_string() < b.first.producer_name.to_string();
+	    }
+	);	
+
+	std::vector<eosio::name> producers_to_vote_for {};
+
+	for(auto t : top_producers){
+		producers_to_vote_for.push_back(t.first.producer_name);
+	}
+
+	top21 t{};
+	t.block_producers = producers_to_vote_for;
+	t.last_update = now();
+	top21_s.set(t, _self);
+
 }
 
 
@@ -744,7 +811,10 @@ ACTION fusion::stakeallcpu(){
 	states.set(s, _self);
 }
 
-ACTION fusion::vote(){
+ACTION fusion::updatetop21(){
+	top21 t = top21_s.get();
+
+	check( t.last_update + (60 * 60 * 24) >= now(), "hasn't been 24h since last top21 update" );
 
 	auto idx = _producers.get_index<"prototalvote"_n>();	
 
@@ -778,30 +848,7 @@ ACTION fusion::vote(){
 		producers_to_vote_for.push_back(t.first.producer_name);
 	}
 
-	/*
-	std::string debug_message = "voting for: ";
-	int count = 0;
-	for (const auto& p : producers_to_vote_for) {
-	    if (count != 0) {
-	        debug_message += ", ";
-	    }
-	    debug_message += p.to_string();
-	    count ++;
-	}	
-
-	debug_t.emplace(_self, [&](auto &_d){
-		_d.ID = debug_t.available_primary_key();
-		_d.message = debug_message;
-	});
-	*/
-	
-	config c = configs.get();
-
-	for(eosio::name ctrct : c.cpu_contracts){
-		del_bandwidth_table del_tbl( SYSTEM_CONTRACT, ctrct.value );
-
-		if( del_tbl.begin() != del_tbl.end() ){
-			action(permission_level{get_self(), "active"_n}, ctrct,"vote"_n,std::tuple{ producers_to_vote_for }).send();
-		}
-	}
+	t.block_producers = producers_to_vote_for;
+	t.last_update = now();
+	top21_s.set(t, _self);
 }

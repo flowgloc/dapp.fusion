@@ -28,16 +28,19 @@ CONTRACT fusion : public contract {
 		fusion(name receiver, name code, datastream<const char *> ds):
 		contract(receiver, code, ds),
 		configs(receiver, receiver.value),
-		states(receiver, receiver.value)
+		states(receiver, receiver.value),
+		top21_s(receiver, receiver.value)
 		{}		
 
 		//Main Actions
 		ACTION addadmin(const eosio::name& admin_to_add);
 		ACTION addcpucntrct(const eosio::name& contract_to_add);
 		ACTION claimgbmvote(const eosio::name& cpu_contract);
+		ACTION claimrefunds();
 		ACTION claimrewards(const eosio::name& user);
 		ACTION distribute();
 		ACTION initconfig();
+		ACTION inittop21();
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
 		ACTION reallocate();
 		ACTION redeem(const eosio::name& user);
@@ -48,8 +51,7 @@ CONTRACT fusion : public contract {
 		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);
 		ACTION stake(const eosio::name& user);
 		ACTION stakeallcpu();
-		ACTION vote();
-
+		ACTION updatetop21();
 
 		//Notifications
 		[[eosio::on_notify("*::transfer")]] void receive_token_transfer(name from, name to, eosio::asset quantity, std::string memo);
@@ -60,6 +62,7 @@ CONTRACT fusion : public contract {
 		//Singletons
 		config_singleton configs;
 		state_singleton states;
+		top21_singleton top21_s;
 
 		//Multi Index Tables
 		debug_table debug_t = debug_table(get_self(), get_self().value);

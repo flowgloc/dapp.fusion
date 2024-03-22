@@ -7,7 +7,6 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
   uint64_t                          seconds_between_distributions;
   uint64_t                          max_snapshots_to_process;
   uint64_t                          initial_epoch_start_time;
-  //uint64_t                          swax_epoch_length_seconds;
   uint64_t                          cpu_rental_epoch_length_seconds;
   uint64_t                          seconds_between_epochs; /* epochs overlap, this is 1 week */
   double                            user_share;
@@ -187,6 +186,21 @@ using requests_tbl = eosio::multi_index<"rdmrequests"_n, redeem_requests
 >;
 
 
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] refund_request {
+  eosio::name             owner;
+  eosio::time_point_sec   request_time;
+  eosio::asset            net_amount;
+  eosio::asset            cpu_amount;
+
+  bool is_empty()const { return net_amount.amount == 0 && cpu_amount.amount == 0; }
+  uint64_t  primary_key()const { return owner.value; }
+
+  // explicit serialization macro is not necessary, used here only to improve compilation time
+  EOSLIB_SERIALIZE( refund_request, (owner)(request_time)(net_amount)(cpu_amount) )
+};
+typedef eosio::multi_index< "refunds"_n, refund_request >      refunds_table;
+
+
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] snapshots {
   uint64_t          timestamp;
   eosio::asset      swax_earning_bucket;
@@ -253,3 +267,12 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state {
                           )
 };
 using state_singleton = eosio::singleton<"state"_n, state>;
+
+
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] top21 {
+  std::vector<eosio::name>    block_producers;
+  uint64_t                    last_update;
+
+  EOSLIB_SERIALIZE(top21, (block_producers)(last_update))
+};
+using top21_singleton = eosio::singleton<"top21"_n, top21>;

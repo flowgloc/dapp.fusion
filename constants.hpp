@@ -26,6 +26,10 @@ static constexpr uint64_t MAXIMUM_WAX_TO_RENT = 10000000; /* 10 Million WAX */
 static constexpr uint64_t MINIMUM_PRODUCERS_TO_VOTE_FOR = 16;
 static constexpr uint64_t MINIMUM_WAX_TO_RENT = 10; /* 10 WAX */
 
+//System Contract
+static constexpr uint32_t SECONDS_PER_DAY = 24 * 3600;
+static constexpr uint32_t REFUND_DELAY_SEC = 3 * SECONDS_PER_DAY;
+
 
 //Errors
 static const char* ERR_CONFIG_NOT_FOUND = "could not locate config";
