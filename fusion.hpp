@@ -38,6 +38,7 @@ CONTRACT fusion : public contract {
 		ACTION claimgbmvote(const eosio::name& cpu_contract);
 		ACTION claimrefunds();
 		ACTION claimrewards(const eosio::name& user);
+		ACTION claimswax(const eosio::name& user);
 		ACTION distribute();
 		ACTION initconfig();
 		ACTION inittop21();

@@ -61,10 +61,42 @@ ACTION fusion::claimrefunds()
 	check( refundsToClaim, "there are no refunds to claim" );
 }
 
-ACTION fusion::claimrewards(const eosio::name& user){
-	/* converting a % to powerup should be bundled in on the front end (i.e. ignored here) */
-
+ACTION fusion::claimswax(const eosio::name& user){
 	require_auth(user);
+	sync_epoch();
+	sync_user(user);
+
+	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
+	if(staker->claimable_wax.amount > 0){
+
+		//we either need to convert their entire claimable balance to swax,
+		//or fetch their row beforehand and then fetch a refreshed version
+		//to calculate the difference after syncing
+
+		int64_t swax_amount_to_claim = staker->claimable_wax.amount;
+		issue_swax(swax_amount_to_claim); 
+
+		staker_t.modify(staker, same_payer, [&](auto &_s){
+			_s.claimable_wax.amount = 0;
+			_s.swax_balance.amount = safeAddInt64(_s.swax_balance.amount, swax_amount_to_claim);
+		});
+
+		//update the state
+	    state s = states.get();
+	    s.swax_currently_earning.amount = safeAddInt64(s.swax_currently_earning.amount, swax_amount_to_claim);
+	    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, swax_amount_to_claim);
+
+	    states.set(s, _self);		
+
+		return;
+	}
+
+	check(false, "you have nothing to claim");
+}
+
+ACTION fusion::claimrewards(const eosio::name& user){
+	require_auth(user);
+	sync_epoch();
 	sync_user(user);
 
 	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
