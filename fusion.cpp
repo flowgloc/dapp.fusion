@@ -673,6 +673,8 @@ ACTION fusion::setrentprice(const eosio::name& caller, const eosio::asset& cost_
 	state s = states.get();
 	s.cost_to_rent_1_wax = cost_to_rent_1_wax;
 	states.set(s, _self);
+
+	action(permission_level{get_self(), "active"_n}, POL_CONTRACT,"setrentprice"_n,std::tuple{ cost_to_rent_1_wax }).send();
 }
 
 ACTION fusion::stake(const eosio::name& user){
