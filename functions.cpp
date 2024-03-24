@@ -62,7 +62,7 @@ bool fusion::memo_is_expected(const std::string& memo){
   std::string memo_copy = memo;
   std::vector<std::string> words = get_words(memo_copy);
 
-  if( words[1] == "rent_cpu" ){
+  if( words[1] == "rent_cpu" || words[1] == "unliquify_exact" ){
       return true;
   }  
 

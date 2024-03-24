@@ -107,6 +107,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   	if( memo == "unliquify" ){
   		//front end has to package in a "stake" action before transferring, to make sure they have a row
+  		sync_epoch();
 
   		check( tkcontract == TOKEN_CONTRACT, "only LSWAX can be unliquified" );
 
@@ -254,6 +255,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   	if( words[1] == "rent_cpu" ){
   		check( tkcontract == WAX_CONTRACT, "only WAX can be sent with this memo" );
+  		check( words.size() >= 5, "memo for unliquify_exact operation is incomplete" );
   		sync_epoch();
 
   		//memo should also include account to rent to 
@@ -383,5 +385,57 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		states.set(s, _self);
   		return;
   	}
+
+  	if( words[1] == "unliquify_exact" ){
+
+  		check( words.size() >= 4, "memo for unliquify_exact operation is incomplete" );
+  		check( tkcontract == TOKEN_CONTRACT, "only LSWAX can be unliquified" );
+  		sync_epoch();
+
+  		config c = configs.get();
+  		check( quantity >= c.minimum_unliquify_amount, "minimum unliquify amount not met" );
+
+  		const uint64_t expected_output = std::strtoull( words[2].c_str(), NULL, 0 );
+  		const double max_slippage = std::stod( words[3].c_str() );
+
+  		//calculate the conversion rate (amount of sWAX to stake to this user)
+  		state s = states.get();
+  		double sWAX_per_lsWAX = safeDivDouble((double) s.swax_currently_backing_lswax.amount, (double) s.liquified_swax.amount);
+  		double converted_sWAX_amount = sWAX_per_lsWAX * (double) quantity.amount;
+  		int64_t converted_sWAX_i64 = (int64_t) converted_sWAX_amount;
+
+		check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
+		double minimum_output_percentage = (double) 1 - max_slippage;
+		double minimum_output = (double) expected_output * minimum_output_percentage;
+
+		check( converted_sWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );  	  		
+
+  		//retire the lsWAX AFTER figuring out the conversion rate
+  		retire_lswax(converted_sWAX_i64);
+
+  		//debit the amount from liquified sWAX
+  		s.liquified_swax.amount = safeSubInt64(s.liquified_swax.amount, converted_sWAX_i64);
+  		s.swax_currently_backing_lswax.amount = safeSubInt64(s.swax_currently_backing_lswax.amount, converted_sWAX_i64);
+
+  		//add this amount to the "currently_earning" sWAX bucket
+  		s.swax_currently_earning.amount = safeAddInt64(s.swax_currently_earning.amount, converted_sWAX_i64);
+	    
+	    states.set(s, _self);   
+
+	    //sync this user before adjusting their row
+  		sync_user(from);
+
+  		//proceed with adding this staked sWAX to their balance
+  		auto staker = staker_t.require_find(from.value, "you need to use the stake action first");
+  		eosio::asset staked_balance = staker->swax_balance;
+  		staked_balance.amount = safeAddInt64(staked_balance.amount, converted_sWAX_i64);
+
+  		staker_t.modify(staker, same_payer, [&](auto &_s){
+  			_s.swax_balance = staked_balance;
+  			_s.last_update = now();
+  		});
+
+  		return;
+  	}  	
 
 }
