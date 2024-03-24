@@ -61,6 +61,79 @@ ACTION fusion::claimrefunds()
 	check( refundsToClaim, "there are no refunds to claim" );
 }
 
+ACTION fusion::claimaslswax(const eosio::name& user){
+	require_auth(user);
+	sync_epoch();
+	sync_user(user);
+
+	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
+	if(staker->claimable_wax.amount > 0){
+
+		int64_t claimable_wax_amount = staker->claimable_wax.amount;
+		issue_swax(claimable_wax_amount);
+
+		state s = states.get();
+
+		double lsWAX_per_sWAX;
+
+		//need to account for initial period where the values are still 0
+		if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
+			lsWAX_per_sWAX = (double) 1;
+		} else {
+			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
+		}
+
+		double converted_lsWAX_amount = lsWAX_per_sWAX * (double) claimable_wax_amount;
+		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+
+		//subtract swax amount from swax_currently_earning
+		//s.swax_currently_earning.amount = safeSubInt64(s.swax_currently_earning.amount, quantity.amount);
+
+		//add swax amount to swax_currently_backing_swax
+		s.swax_currently_backing_lswax.amount = safeAddInt64(s.swax_currently_backing_lswax.amount, claimable_wax_amount);
+
+		//issue the converted lsWAX amount to the user
+		issue_lswax(converted_lsWAX_i64, user);
+
+		//add the issued amount to liquified_swax
+		s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);
+
+		staker_t.modify(staker, same_payer, [&](auto &_s){
+			_s.claimable_wax.amount = 0;
+			//_s.swax_balance.amount = safeAddInt64(_s.swax_balance.amount, swax_amount_to_claim);
+		});
+
+		//update the state
+	    //s.swax_currently_earning.amount = safeAddInt64(s.swax_currently_earning.amount, swax_amount_to_claim);
+	    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, claimable_wax_amount);
+
+	    states.set(s, _self);		
+
+		return;
+	}
+
+	check(false, "you have nothing to claim");
+}
+
+ACTION fusion::claimrewards(const eosio::name& user){
+	require_auth(user);
+	sync_epoch();
+	sync_user(user);
+
+	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
+	if(staker->claimable_wax.amount > 0){
+		transfer_tokens( user, staker->claimable_wax, WAX_CONTRACT, std::string("your sWAX reward claim from waxfusion.io - liquid staking protocol") );
+
+		staker_t.modify(staker, same_payer, [&](auto &_s){
+			_s.claimable_wax.amount = 0;
+		});
+
+		return;
+	}
+
+	check(false, "you have nothing to claim");
+}
+
 ACTION fusion::claimswax(const eosio::name& user){
 	require_auth(user);
 	sync_epoch();
@@ -87,25 +160,6 @@ ACTION fusion::claimswax(const eosio::name& user){
 	    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, swax_amount_to_claim);
 
 	    states.set(s, _self);		
-
-		return;
-	}
-
-	check(false, "you have nothing to claim");
-}
-
-ACTION fusion::claimrewards(const eosio::name& user){
-	require_auth(user);
-	sync_epoch();
-	sync_user(user);
-
-	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
-	if(staker->claimable_wax.amount > 0){
-		transfer_tokens( user, staker->claimable_wax, WAX_CONTRACT, std::string("your sWAX reward claim from waxfusion.io - liquid staking protocol") );
-
-		staker_t.modify(staker, same_payer, [&](auto &_s){
-			_s.claimable_wax.amount = 0;
-		});
 
 		return;
 	}
