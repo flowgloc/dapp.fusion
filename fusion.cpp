@@ -396,6 +396,75 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 	return;
 }
 
+ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantity, 
+	const eosio::asset& expected_output, const double& max_slippage)
+{
+
+	require_auth(user);
+    check(quantity.amount > 0, "Invalid quantity.");
+    check(quantity.amount < MAX_ASSET_AMOUNT, "quantity too large");
+    check(quantity.symbol == SWAX_SYMBOL, "only SWAX can be liquified");	
+
+    check(expected_output.amount > 0, "Invalid output quantity.");
+    check(expected_output.amount < MAX_ASSET_AMOUNT, "output quantity too large");
+    check(expected_output.symbol == LSWAX_SYMBOL, "output symbol should be LSWAX");	    
+
+    //process any payouts for this user since their last interaction
+    sync_user(user);
+
+    //make sure they have a row here
+	auto staker = staker_t.require_find(user.value, "you have nothing to liquify");
+
+	if(staker->swax_balance < quantity){
+		check(false, "you are trying to liquify more than you have");
+	}
+
+	//debit requested amount from their staked balance
+	staker_t.modify(staker, same_payer, [&](auto &_s){
+		_s.swax_balance -= quantity;
+		_s.last_update = now();
+	});
+
+	//get the current state table
+	state s = states.get();
+
+	//calculate equivalent amount of lsWAX (BEFORE adjusting sWAX amounts)
+	double lsWAX_per_sWAX;
+
+	//need to account for initial period where the values are still 0
+	if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
+		lsWAX_per_sWAX = (double) 1;
+	} else {
+		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
+	}
+
+	double converted_lsWAX_amount = lsWAX_per_sWAX * (double) quantity.amount;
+	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+
+	check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
+	double minimum_output_percentage = (double) 1 - max_slippage;
+	double minimum_output = (double) expected_output.amount * minimum_output_percentage;
+
+	check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );
+
+	//subtract swax amount from swax_currently_earning
+	s.swax_currently_earning.amount = safeSubInt64(s.swax_currently_earning.amount, quantity.amount);
+
+	//add swax amount to swax_currently_backing_swax
+	s.swax_currently_backing_lswax.amount = safeAddInt64(s.swax_currently_backing_lswax.amount, quantity.amount);
+
+	//issue the converted lsWAX amount to the user
+	issue_lswax(converted_lsWAX_i64, user);
+
+	//add the issued amount to liquified_swax
+	s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);
+
+	//apply the changes to state table
+	states.set(s, _self);
+
+	return;
+}
+
 /**
 * reallocate
 * used for taking any funds that were requested to be redeemed, but werent redeemed in time

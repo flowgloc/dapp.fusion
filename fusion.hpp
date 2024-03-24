@@ -42,6 +42,8 @@ CONTRACT fusion : public contract {
 		ACTION initconfig();
 		ACTION inittop21();
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
+		ACTION liquifyexact(const eosio::name& user, const eosio::asset& quantity, 
+			const eosio::asset& expected_output, const double& max_slippage);
 		ACTION reallocate();
 		ACTION redeem(const eosio::name& user);
 		ACTION removeadmin(const eosio::name& admin_to_remove);
