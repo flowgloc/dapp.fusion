@@ -16,16 +16,40 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
     //only accept wax and lsWAX (sWAX is only issued, not transferred)
   	validate_token(quantity.symbol, tkcontract);
 
-  	/** 
-  	 *  why might we receive tokens?
-  	 * 	WAX, to mint sWAX (memo == stake)
-  	 * 	lsWAX, to unliquify and convert to sWAX (memo == unliquify)
-  	 * 	WAX, to rent CPU (memo == rent) 
-  	 * 	WAX, when claiming voting rewards (that likely wont happen on this contract)
-  	 * 	but we will receive deposits of rewards from other contracts
-  	 * 	so...
-  	 * 	"revenue" sent here from.. anything (memo == waxfusion_revenue)
-  	 */
+  	if( memo == "wax_lswax_liquidity" ){
+  		check( tkcontract == WAX_CONTRACT, "only WAX should be sent with this memo" );
+  		check( from == POL_CONTRACT, ( "expected " + POL_CONTRACT.to_string() + " to be the sender" ).c_str() );
+
+  		issue_swax(quantity.amount);	
+
+  		/* staked balance for user is not necessary since all is being liquified */
+
+  		sync_epoch();  		
+
+	    state s = states.get();
+	    	
+		double lsWAX_per_sWAX;
+
+		//need to account for initial period where the values are still 0
+		if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
+			lsWAX_per_sWAX = (double) 1;
+		} else {
+			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
+		}
+
+		double converted_lsWAX_amount = lsWAX_per_sWAX * (double) quantity.amount;
+		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+
+		issue_lswax(converted_lsWAX_i64, _self);
+		transfer_tokens( POL_CONTRACT, asset( converted_lsWAX_i64, LSWAX_SYMBOL ), TOKEN_CONTRACT, "liquidity" );
+
+		s.swax_currently_backing_lswax.amount = safeAddInt64(s.swax_currently_backing_lswax.amount, quantity.amount);
+		s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);	  
+		s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, quantity.amount);    
+
+	    states.set(s, _self);
+  		return;	    	
+  	} 
 
   	/** stake memo
   	 *  used for creating new sWAX tokens at 1:1 ratio
@@ -65,35 +89,21 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 	    s.swax_currently_earning.amount = safeAddInt64(s.swax_currently_earning.amount, quantity.amount);
 	    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, quantity.amount);
 
-	    /** 
-	    * this actually should only happen when sending wax to the cpu contract linked to an epoch
-	    * until it gets sent there, it should not be counted in the epoch's wax bucket
-	    */ 
-
-	    /* TODO: safemath for the addition to wax_bucket */
-
-	    /**
-	    uint64_t next_epoch_start_time = s.last_epoch_start_time += c.seconds_between_epochs;
-	    auto epoch_itr = epochs_t.find(next_epoch_start_time);
-
-	    check(epoch_itr != epochs_t.end(), "error locating epoch");
-
-    	epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
-    		_e.wax_bucket += quantity;
-    	});
-    	*/
-
 	    states.set(s, _self);
 
   		return;
-
-  		//the liquify action can be packaged into this tx on the front end
   	}
 
   	/** unliquify memo
   	 *  used for converting lsWAX back to sWAX
   	 * 	rate is not 1:1, needs to be fetched from state table
   	 */
+
+	/** 
+	* TODO
+	* add unliquifyexact memo (or add an expected_output / max_slippage param to unliquify memo)
+	* people need to be able to predict outcomes for arb opportunities etc
+	*/  	
 
   	if( memo == "unliquify" ){
   		//front end has to package in a "stake" action before transferring, to make sure they have a row
@@ -227,6 +237,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		});
 
   		states.set(s, _self);
+  		return;
   	}
 
   	/**
@@ -344,15 +355,6 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   		double amount_received_double = (double) quantity.amount;
 
-  		debug_t.emplace(_self, [&](auto &_d){
-  			_d.ID = debug_t.available_primary_key();
-  			_d.message = std::string(cpu_receiver.to_string() + " should get " + std::to_string(wax_amount_to_rent) + " WAX for " + std::to_string(days_to_rent) + " days."
-  				+ " Amount received was " + std::to_string(amount_received_double) + " without factoring precision. Amount expected was " +  std::to_string(expected_amount_received) + " WAX."
-  				);
-  		});
-
-  		//return;
-
   		check( amount_received_double >= expected_amount_received, ("expected to receive " + std::to_string(expected_amount_received) + " WAX" ).c_str() );
 
   		//if they sent more than expected, calculate difference and refund it
@@ -361,7 +363,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   			double amount_to_refund = amount_received_double - expected_amount_received;
 
   			if( (int64_t) amount_to_refund > 0 ){
-  				transfer_tokens( from, asset(amount_to_refund, WAX_SYMBOL), WAX_CONTRACT, "cpu rental refund from waxfusion.io - liquid staking protocol" );
+  				transfer_tokens( from, asset( (int64_t) amount_to_refund, WAX_SYMBOL ), WAX_CONTRACT, "cpu rental refund from waxfusion.io - liquid staking protocol" );
   			}
   		}
 
@@ -380,6 +382,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   		//update the state
   		states.set(s, _self);
+  		return;
   	}
 
 }

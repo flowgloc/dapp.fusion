@@ -186,7 +186,7 @@ using requests_tbl = eosio::multi_index<"rdmrequests"_n, redeem_requests
 >;
 
 
-struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] refund_request {
+struct [[eosio::table]] refund_request {
   eosio::name             owner;
   eosio::time_point_sec   request_time;
   eosio::asset            net_amount;

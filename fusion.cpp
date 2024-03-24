@@ -203,33 +203,12 @@ ACTION fusion::distribute(){
 
     s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, swax_autocompounding_alloc_i64);
 
-    //check when the last epoch started, calculate next epoch start
-    //upsert epoch and add this to the bucket
-    uint64_t next_epoch_start_time = s.last_epoch_start_time += c.seconds_between_epochs;
-    auto epoch_itr = epochs_t.find(next_epoch_start_time);
-
-    if(epoch_itr == epochs_t.end()){
-    	epochs_t.emplace(get_self(), [&](auto &_e){
-    		_e.start_time = next_epoch_start_time;
-    		/* unstake 3 days before epoch ends */
-    		_e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
-    		_e.cpu_wallet = "idk"_n; /* how do we figure this out, and do we transfer there now? */
-    		_e.wax_bucket = asset(swax_autocompounding_alloc_i64, WAX_SYMBOL);
-    		_e.wax_to_refund = ZERO_WAX;
-    	});
-    } else {
-    	/* TODO: safemath for the addition to wax_bucket */
-    	
-    	epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
-    		_e.wax_bucket += asset(swax_autocompounding_alloc_i64, WAX_SYMBOL);
-    	});
-    }
-
     states.set(s, _self);
 
 	return;	
 
 }
+
 
 ACTION fusion::initconfig(){
 	require_auth(get_self());
@@ -260,6 +239,7 @@ ACTION fusion::initconfig(){
 	c.admin_wallets = {
 		"guild.waxdao"_n,
 		"oig"_n,
+		"workr.fusion"_n,
 		_self
 		//"admin.wax"_n
 	};
@@ -351,6 +331,12 @@ ACTION fusion::inittop21(){
 	top21_s.set(t, _self);
 
 }
+
+/** 
+* TODO
+* add liquifyexact action (or add an expected_output / max_slippage param to liquify action)
+* people need to be able to predict outcomes for arb opportunities etc
+*/
 
 
 ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
@@ -760,6 +746,12 @@ ACTION fusion::stakeallcpu(){
 		eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
 		check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
 
+
+
+
+		/* This logic is probably not necessary anymore knowing that staking new funds doesnt affect anything */
+
+		/*
 		//then we can also see if there is an epoch that exists with the timetamp from 2 epochs ago
 		uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
 		uint64_t two_epochs_ago = s.last_epoch_start_time - (c.seconds_between_epochs * 2);
@@ -770,8 +762,11 @@ ACTION fusion::stakeallcpu(){
 			//an epoch was found - make sure it's been refunded
 			check( epoch_itr->total_cpu_funds_returned >= epoch_itr->wax_bucket, (next_cpu_contract.to_string() + " still has funds tied up").c_str() );
 		}
+		*/
 
-		transfer_tokens( s.current_cpu_contract, s.wax_available_for_rentals, WAX_CONTRACT, cpu_stake_memo(c.fallback_cpu_receiver, next_epoch_start_time) );
+		uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
+
+		transfer_tokens( next_cpu_contract, s.wax_available_for_rentals, WAX_CONTRACT, cpu_stake_memo(c.fallback_cpu_receiver, next_epoch_start_time) );
 
 		//upsert the epoch that it was staked to, so it reflects the added wax
 		auto next_epoch_itr = epochs_t.find(next_epoch_start_time);
@@ -807,8 +802,47 @@ ACTION fusion::stakeallcpu(){
 
 	//update the next_stakeall_time
 	s.next_stakeall_time += c.seconds_between_stakeall;
-
 	states.set(s, _self);
+}
+
+/**
+* sync
+* this only exists to keep data refreshed and make it easier for front ends to display fresh data
+* it's not necessary for the dapp to function properly
+* therefore it requires admin auth to avoid random people spamming the network and running this constantly
+*/ 
+
+ACTION fusion::sync(const eosio::name& caller){
+	require_auth( caller );
+	check( is_an_admin( caller ), ( caller.to_string() + " is not an admin" ).c_str() );
+	sync_epoch();
+}
+
+ACTION fusion::unstakecpu(){
+	//anyone can call this
+
+	sync_epoch();
+
+	//get the most recently started epoch
+	state s = states.get();
+	config c = configs.get();
+
+	//the only one that should ever need unstaking is the one that started prior
+	//calculate the epoch prior to the most recently started one
+	uint64_t epoch_to_check = s.last_epoch_start_time - c.seconds_between_epochs;
+
+	//if the unstake time is <= now, look up its cpu contract is delband table
+	auto epoch_itr = epochs_t.require_find( epoch_to_check, ("could not find epoch " + std::to_string( epoch_to_check ) ).c_str() );
+
+	check( epoch_itr->time_to_unstake <= now(), ("can not unstake until another " + std::to_string( epoch_itr-> time_to_unstake - now() ) + " seconds has passed").c_str() );
+
+	del_bandwidth_table del_tbl( SYSTEM_CONTRACT, epoch_itr->cpu_wallet.value );
+
+	if( del_tbl.begin() == del_tbl.end() ){
+		check( false, ( epoch_itr->cpu_wallet.to_string() + " has nothing to unstake" ).c_str() );
+	}	
+
+	action(permission_level{get_self(), "active"_n}, epoch_itr->cpu_wallet,"unstakebatch"_n,std::tuple{ (int) 1000 }).send();
 }
 
 ACTION fusion::updatetop21(){

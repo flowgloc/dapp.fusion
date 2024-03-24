@@ -51,6 +51,8 @@ CONTRACT fusion : public contract {
 		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);
 		ACTION stake(const eosio::name& user);
 		ACTION stakeallcpu();
+		ACTION sync(const eosio::name& caller);
+		ACTION unstakecpu();
 		ACTION updatetop21();
 
 		//Notifications

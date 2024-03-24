@@ -55,7 +55,7 @@ void fusion::issue_swax(const int64_t& amount){
 }
 
 bool fusion::memo_is_expected(const std::string& memo){
-  if( memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" || memo == "cpu rental return" ){
+  if( memo == "wax_lswax_liquidity" || memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" || memo == "cpu rental return" ){
     return true;
   }
 
@@ -110,7 +110,7 @@ void fusion::sync_epoch(){
   check( next_cpu_contract != s.current_cpu_contract, "next cpu contract cant be the same as the current contract" );
 
   //calculate when the next is supposed to start
-  uint64_t next_epoch_start_time = s.last_epoch_start_time += c.seconds_between_epochs;
+  uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
 
   //is now() >= that?
   if( now() >= next_epoch_start_time ){
