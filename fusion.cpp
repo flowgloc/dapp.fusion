@@ -193,6 +193,7 @@ ACTION fusion::distribute(){
 		_snap.pol_bucket = asset(pol_alloc_i64, WAX_SYMBOL);
 		_snap.ecosystem_bucket = asset(eco_alloc_i64, WAX_SYMBOL);
 		_snap.total_distributed = asset(amount_to_distribute_i64, WAX_SYMBOL);	
+		_snap.total_swax_earning = s.swax_currently_earning;
 	});
 
 	//update total_revenue_distributed in state

@@ -166,7 +166,7 @@ void fusion::sync_user(const eosio::name& user){
       //if the amount to pay out is > 0...
       if(it->swax_earning_bucket.amount > 0){
         //calculate the % of snapshot owned by this user
-        double percentage_allocation = (double) staker->swax_balance.amount / (double) it->swax_earning_bucket.amount; 
+        double percentage_allocation = (double) staker->swax_balance.amount / (double) it->total_swax_earning.amount;
 
         //use that to get a wax quantity (needs to be positive)
         double wax_allocation = (double) it->swax_earning_bucket.amount * percentage_allocation;
@@ -226,7 +226,8 @@ void fusion::zero_distribution(){
     _snap.lswax_autocompounding_bucket = ZERO_WAX;
     _snap.pol_bucket = ZERO_WAX;
     _snap.ecosystem_bucket = ZERO_WAX;
-    _snap.total_distributed = ZERO_WAX;  
+    _snap.total_distributed = ZERO_WAX; 
+    _snap.total_swax_earning = ZERO_SWAX; 
   });  
 
   s.next_distribution += c.seconds_between_distributions;

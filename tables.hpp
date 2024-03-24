@@ -203,11 +203,18 @@ typedef eosio::multi_index< "refunds"_n, refund_request >      refunds_table;
 
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] snapshots {
   uint64_t          timestamp;
+
+  /** these "buckets" are just records of how much revenue was allocated where
+   *  they are not meant to be debited from and are unrelated to contract state
+   */
   eosio::asset      swax_earning_bucket;
   eosio::asset      lswax_autocompounding_bucket;
   eosio::asset      pol_bucket;
   eosio::asset      ecosystem_bucket;
   eosio::asset      total_distributed;
+
+  /* need to know how much swax was earning to calculate user staking power later */
+  eosio::asset      total_swax_earning;
   
   uint64_t primary_key() const { return timestamp; }
 };
