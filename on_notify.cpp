@@ -273,8 +273,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		state s = states.get();
   		config c = configs.get();
 
-  		/* TODO: Add safety checks for multiplying uint64_t */
-  		const uint64_t amount_to_rent_with_precision = 100000000 * wax_amount_to_rent;
+  		const uint64_t amount_to_rent_with_precision = safeMulUInt64(100000000, wax_amount_to_rent);
 
   		//make sure there is anough wax available for this rental
   		check( s.wax_available_for_rentals.amount >= amount_to_rent_with_precision, "there is not enough wax in the rental pool to cover this rental" );

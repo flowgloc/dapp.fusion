@@ -2,7 +2,7 @@
 
 //Numeric Limits
 static constexpr int64_t MAX_ASSET_AMOUNT = 4611686018427387903;
-static constexpr uint64_t MAX_ASSET_AMOUNT_64 = 4611686018427387903;
+static constexpr uint64_t MAX_ASSET_AMOUNT_U64 = 4611686018427387903;
 
 //Contract names
 static constexpr eosio::name POL_CONTRACT = "pol.fusion"_n;
