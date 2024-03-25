@@ -86,25 +86,14 @@ ACTION fusion::claimaslswax(const eosio::name& user){
 		double converted_lsWAX_amount = lsWAX_per_sWAX * (double) claimable_wax_amount;
 		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
 
-		//subtract swax amount from swax_currently_earning
-		//s.swax_currently_earning.amount = safeSubInt64(s.swax_currently_earning.amount, quantity.amount);
-
-		//add swax amount to swax_currently_backing_swax
-		s.swax_currently_backing_lswax.amount = safeAddInt64(s.swax_currently_backing_lswax.amount, claimable_wax_amount);
-
-		//issue the converted lsWAX amount to the user
 		issue_lswax(converted_lsWAX_i64, user);
-
-		//add the issued amount to liquified_swax
-		s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);
 
 		staker_t.modify(staker, same_payer, [&](auto &_s){
 			_s.claimable_wax.amount = 0;
-			//_s.swax_balance.amount = safeAddInt64(_s.swax_balance.amount, swax_amount_to_claim);
 		});
 
-		//update the state
-	    //s.swax_currently_earning.amount = safeAddInt64(s.swax_currently_earning.amount, swax_amount_to_claim);
+		s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);
+		s.swax_currently_backing_lswax.amount = safeAddInt64(s.swax_currently_backing_lswax.amount, claimable_wax_amount);
 	    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, claimable_wax_amount);
 
 	    states.set(s, _self);		
@@ -588,14 +577,17 @@ ACTION fusion::redeem(const eosio::name& user){
 
 	uint64_t redemption_start_time = s.last_epoch_start_time;
 	uint64_t redemption_end_time = s.last_epoch_start_time + c.redemption_period_length_seconds;
+
+	uint64_t epoch_to_claim_from = s.last_epoch_start_time - c.seconds_between_epochs;
  
 	check( now() < redemption_end_time, 
 		( "next redemption does not start until " + std::to_string(s.last_epoch_start_time + c.seconds_between_epochs) ).c_str() 
 	);
 
 	//find if the user has a request for this period
-	requests_tbl requests_t = requests_tbl(get_self(), redemption_start_time);
-	auto req_itr = requests_t.require_find(user.value, "you don't have a redemption request for the current redemption period");
+	requests_tbl requests_t = requests_tbl(get_self(), user.value);
+
+	auto req_itr = requests_t.require_find(epoch_to_claim_from, "you don't have a redemption request for the current redemption period");
 
 	//if they do, make sure the amount is <= their swax amount
 	auto staker = staker_t.require_find(user.value, "you are not staking any sWAX");
@@ -627,6 +619,8 @@ ACTION fusion::redeem(const eosio::name& user){
 
 	//erase the request
 	req_itr = requests_t.erase(req_itr);
+
+	/* TODO (maybe?): does the epoch itself need to be updated to reflect this change? */
 }
 
 
@@ -677,6 +671,8 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 	state s = states.get();
 	config c = configs.get();
 
+	requests_tbl requests_t = requests_tbl(get_self(), user.value);
+
 	bool request_can_be_filled = false;
 	eosio::asset remaining_amount_to_fill = swax_to_redeem;
 	uint64_t epoch_to_request_from = s.last_epoch_start_time - c.seconds_between_epochs;
@@ -688,7 +684,7 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 	};
 
 	/** 
-	* loop through the 3 redemption scopes and if the user has any reqs,
+	* loop through the 3 redemption periods and if the user has any reqs,
 	* delete them and sub the amounts from epoch_itr->wax_to_refund
 	*/
 
@@ -696,8 +692,8 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 		auto epoch_itr = epochs_t.find(ep);
 
 		if(epoch_itr != epochs_t.end()){
-			requests_tbl requests_t = requests_tbl(get_self(), epoch_itr->redemption_period_start_time);
-			auto req_itr = requests_t.find(user.value);	
+
+			auto req_itr = requests_t.find(ep);	
 
 			if(req_itr != requests_t.end()){
 				//there is a pending request
@@ -714,7 +710,6 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 			}
 		}	
 	}
-
 
 	/**
 	* now loop through them again and process them
@@ -750,13 +745,12 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 						* (any previous records should have been deleted first)
 						*/
 
-						requests_tbl requests_t = requests_tbl(get_self(), epoch_itr->redemption_period_start_time);
-						auto req_itr = requests_t.find(user.value);
+						auto req_itr = requests_t.find(ep);
 
 						check( req_itr == requests_t.end(), "user has an existing redemption request in this epoch" );
 
 						requests_t.emplace(user, [&](auto &_r){
-							_r.wallet = user;
+							_r.epoch_id = ep;
 							_r.wax_amount_requested = asset(remaining_amount_to_fill.amount, WAX_SYMBOL);
 						});
 
@@ -772,13 +766,12 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 							_e.wax_to_refund = asset(updated_refunding_amount, WAX_SYMBOL);
 						});
 
-						requests_tbl requests_t = requests_tbl(get_self(), epoch_itr->redemption_period_start_time);
-						auto req_itr = requests_t.find(user.value);
+						auto req_itr = requests_t.find(ep);
 
 						check( req_itr == requests_t.end(), "user has an existing redemption request in this epoch" );
 						
 						requests_t.emplace(user, [&](auto &_r){
-							_r.wallet = user;
+							_r.epoch_id = ep;
 							_r.wax_amount_requested = asset(amount_available, WAX_SYMBOL);
 						});
 					}

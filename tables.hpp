@@ -171,16 +171,19 @@ typedef eosio::multi_index< "producers"_n, producer_info,
 
 /** 
 * redeem_requests table stores requests for redemptions
-* should this be scoped by user and use timestamp of redemption period as key?
-* or scoped by timestamp of redemption period and use user as key?
-* pros to scope by redemption period: all data aggregated in 1 predictable place for each epoch
+* 
+* scoped by user since there is probably 0 reason why a front end would ever need to 
+* display a list of all requests from an epoch
+* and 0 reason why the contract would ever need easy access to this list
+* however there is plenty of reason to get a list of all requests made by a user
+* e.g. showing them their pending requests on a front end without making more than 1 api call
 */
 
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] redeem_requests {
-  eosio::name     wallet;
+  uint64_t        epoch_id;
   eosio::asset    wax_amount_requested;
   
-  uint64_t primary_key() const { return wallet.value; }
+  uint64_t primary_key() const { return epoch_id; }
 };
 using requests_tbl = eosio::multi_index<"rdmrequests"_n, redeem_requests
 >;
