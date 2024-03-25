@@ -35,7 +35,7 @@ CONTRACT fusion : public contract {
 		//Main Actions
 		ACTION addadmin(const eosio::name& admin_to_add);
 		ACTION addcpucntrct(const eosio::name& contract_to_add);
-		ACTION claimaslswax(const eosio::name& user);
+		ACTION claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const double& max_slippage);
 		ACTION claimgbmvote(const eosio::name& cpu_contract);
 		ACTION claimrefunds();
 		ACTION claimrewards(const eosio::name& user);

@@ -61,10 +61,14 @@ ACTION fusion::claimrefunds()
 	check( refundsToClaim, "there are no refunds to claim" );
 }
 
-ACTION fusion::claimaslswax(const eosio::name& user){
+ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const double& max_slippage){
 	require_auth(user);
 	sync_epoch();
 	sync_user(user);
+
+    check(expected_output.amount > 0, "Invalid output quantity.");
+    check(expected_output.amount < MAX_ASSET_AMOUNT, "output quantity too large");
+    check(expected_output.symbol == LSWAX_SYMBOL, "output symbol should be LSWAX");	 	
 
 	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
 	if(staker->claimable_wax.amount > 0){
@@ -85,6 +89,12 @@ ACTION fusion::claimaslswax(const eosio::name& user){
 
 		double converted_lsWAX_amount = lsWAX_per_sWAX * (double) claimable_wax_amount;
 		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+
+	    check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
+	    double minimum_output_percentage = (double) 1 - max_slippage;
+	    double minimum_output = (double) expected_output.amount * minimum_output_percentage;
+
+	    check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );		
 
 		issue_lswax(converted_lsWAX_i64, user);
 
@@ -407,12 +417,6 @@ ACTION fusion::inittop21(){
 	top21_s.set(t, _self);
 
 }
-
-/** 
-* TODO
-* add liquifyexact action (or add an expected_output / max_slippage param to liquify action)
-* people need to be able to predict outcomes for arb opportunities etc
-*/
 
 
 ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
