@@ -999,7 +999,7 @@ ACTION fusion::unstakecpu(){
 ACTION fusion::updatetop21(){
 	top21 t = top21_s.get();
 
-	check( t.last_update + (60 * 60 * 24) >= now(), "hasn't been 24h since last top21 update" );
+	check( t.last_update + (60 * 60 * 24) <= now(), "hasn't been 24h since last top21 update" );
 
 	auto idx = _producers.get_index<"prototalvote"_n>();	
 
