@@ -149,7 +149,7 @@ void fusion::sync_user(const eosio::name& user){
   auto staker = staker_t.require_find(user.value, "you need to use the stake action first");
 
   //is their last_update < last_payout ?
-  auto low_itr = snaps_t.lower_bound(staker->last_update);
+  auto low_itr = snaps_t.lower_bound(staker->last_update + 1);
 
   if(low_itr == snaps_t.end()) return;
 
