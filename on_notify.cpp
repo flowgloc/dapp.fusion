@@ -121,10 +121,10 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		int64_t converted_sWAX_i64 = (int64_t) converted_sWAX_amount;
 
   		//retire the lsWAX AFTER figuring out the conversion rate
-  		retire_lswax(converted_sWAX_i64);
+  		retire_lswax(quantity.amount);
 
   		//debit the amount from liquified sWAX
-  		s.liquified_swax.amount = safeSubInt64(s.liquified_swax.amount, converted_sWAX_i64);
+  		s.liquified_swax.amount = safeSubInt64(s.liquified_swax.amount, quantity.amount);
   		s.swax_currently_backing_lswax.amount = safeSubInt64(s.swax_currently_backing_lswax.amount, converted_sWAX_i64);
 
   		//add this amount to the "currently_earning" sWAX bucket
@@ -410,8 +410,6 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
 		check( converted_sWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );  	  		
 
-
-  		//retire the lsWAX AFTER figuring out the conversion rate
   		retire_lswax(quantity.amount);
 
   		//debit the amount from liquified sWAX
