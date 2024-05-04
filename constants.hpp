@@ -8,6 +8,7 @@ static constexpr uint64_t MAX_ASSET_AMOUNT_U64 = 4611686018427387903;
 static constexpr eosio::name POL_CONTRACT = "pol.fusion"_n;
 static constexpr eosio::name SYSTEM_CONTRACT = "eosio"_n;
 static constexpr eosio::name TOKEN_CONTRACT = "token.fusion"_n;
+static constexpr eosio::name VE33_CONTRACT = "ve33.fusion"_n;
 static constexpr eosio::name WAX_CONTRACT = "eosio.token"_n;
 
 //Symbols

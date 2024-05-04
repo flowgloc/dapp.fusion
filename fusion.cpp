@@ -244,6 +244,9 @@ ACTION fusion::distribute(){
 
 	//loop through ecosystem_fund and store each of their share in ecosystem table 
 
+	//old ecosystem fund logic, replaced with transfer to ve33.fusion
+	//remove when everything is finalized
+	/*
 	double total_paid_to_eco = 0;
 	for(auto e : c.ecosystem_fund){
 		double allocation = e.amount * ecosystem_share;
@@ -269,6 +272,9 @@ ACTION fusion::distribute(){
 	}
 
 	check( total_paid_to_eco <= ecosystem_share, "overdrawn ecosystem allocation" );
+	*/
+
+	transfer_tokens( VE33_CONTRACT, asset(eco_alloc_i64, WAX_SYMBOL), WAX_CONTRACT, std::string("revenue") );
 
 	//create a snapshot
 	snaps_t.emplace(get_self(), [&](auto &_snap){
