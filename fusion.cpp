@@ -463,7 +463,7 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 
 	//calculate the 0.05% fee
 	//calculate the remainder for the user
-	double procotol_fee_percentage = (double) 0.005;
+	double procotol_fee_percentage = (double) 0.0005;
 	double user_percentage = (double) 1 - procotol_fee_percentage;
 	double protocol_fee_double = procotol_fee_percentage * (double) swax_to_redeem.amount;
 	double amount_to_transfer_double = user_percentage * swax_to_redeem.amount;
