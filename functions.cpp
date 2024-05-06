@@ -1,5 +1,94 @@
 #pragma once
 
+void fusion::debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance){
+  //need to know which epochs to check
+  state s = states.get();
+  config c = configs.get();
+
+  requests_tbl requests_t = requests_tbl(get_self(), user.value);
+
+  eosio::asset total_amount_awaiting_redemption = eosio::asset( 0, WAX_SYMBOL );
+  uint64_t first_epoch_to_check = s.last_epoch_start_time - c.seconds_between_epochs;
+
+  std::vector<uint64_t> epochs_to_check = { //reversed since we want to debit the farthest epochs if needed
+    first_epoch_to_check + ( c.seconds_between_epochs * 2 ),
+    first_epoch_to_check + c.seconds_between_epochs,
+    first_epoch_to_check
+  };    
+
+  for(uint64_t ep : epochs_to_check){
+    auto epoch_itr = epochs_t.find(ep);
+
+    if(epoch_itr != epochs_t.end()){
+
+      auto req_itr = requests_t.find(ep); 
+
+      if(req_itr != requests_t.end()){
+        //there is a pending request
+
+        //add the requested amount to total_amount_awaiting_redemption
+        total_amount_awaiting_redemption.amount = safeAddInt64( total_amount_awaiting_redemption.amount, req_itr->wax_amount_requested.amount );
+
+      }
+    } 
+  }  
+
+  if( total_amount_awaiting_redemption.amount > swax_balance.amount ){
+    //the user is overdrawn, need to loop through the epochs again and debit the necessary amount
+    int64_t amount_overdrawn_i64 = safeSubInt64( total_amount_awaiting_redemption.amount, swax_balance.amount );
+
+    for(uint64_t ep : epochs_to_check){
+      auto epoch_itr = epochs_t.find(ep);
+
+      if(epoch_itr != epochs_t.end()){
+
+        auto req_itr = requests_t.find(ep); 
+
+        if(req_itr != requests_t.end()){
+          //there is a pending request
+
+          //if the amount requested is > amount_overdrawn_i64, only subtract the difference, and break
+          if( req_itr->wax_amount_requested.amount > amount_overdrawn_i64 ){
+            requests_t.modify(req_itr, same_payer, [&](auto &_r){
+              _r.wax_amount_requested.amount = safeSubInt64( _r.wax_amount_requested.amount, amount_overdrawn_i64 );
+            });
+
+            epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+              _e.wax_to_refund.amount = safeSubInt64( _e.wax_to_refund.amount, amount_overdrawn_i64 );
+            });
+
+            break;
+          }
+
+          else if( req_itr->wax_amount_requested.amount == amount_overdrawn_i64 ){
+            epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+              _e.wax_to_refund.amount = safeSubInt64( _e.wax_to_refund.amount, amount_overdrawn_i64 );
+            });
+
+            req_itr = requests_t.erase( req_itr );
+
+            break;
+          }
+
+          else{ //amount requested is < the overdrawn amount
+            amount_overdrawn_i64 = safeSubInt64( amount_overdrawn_i64, req_itr->wax_amount_requested.amount );
+
+            epochs_t.modify(epoch_itr, get_self(), [&](auto &_e){
+              _e.wax_to_refund.amount = safeSubInt64( _e.wax_to_refund.amount, req_itr->wax_amount_requested.amount );
+            });       
+
+            req_itr = requests_t.erase( req_itr );     
+          }
+
+        }
+      } 
+    }  
+
+  }
+
+  return;
+}
+
 std::string fusion::cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp){
   return ("|stake_cpu|" + cpu_receiver.to_string() + "|" + std::to_string(epoch_timestamp) + "|").c_str();
 }

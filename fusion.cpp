@@ -448,6 +448,8 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
     check( swax_to_redeem.amount > 0, "Must redeem a positive quantity" );
     check( swax_to_redeem.amount < MAX_ASSET_AMOUNT, "quantity too large" );
 
+    eosio::asset new_sWAX_balance = staker->swax_balance - swax_to_redeem;
+
 	//debit requested amount from their staked balance
 	staker_t.modify(staker, same_payer, [&](auto &_s){
 		_s.swax_balance -= swax_to_redeem;
@@ -481,8 +483,7 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 	//set the state
 	states.set(s, _self);
 
-
-    //make sure to account for any conflicts with existing redeem requests
+    debit_user_redemptions_if_necessary(user, new_sWAX_balance);
 
 }
 
@@ -510,6 +511,8 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 	if(staker->swax_balance < quantity){
 		check(false, "you are trying to liquify more than you have");
 	}
+
+	eosio::asset new_sWAX_balance = staker->swax_balance - quantity;
 
 	//debit requested amount from their staked balance
 	staker_t.modify(staker, same_payer, [&](auto &_s){
@@ -548,6 +551,8 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 	//apply the changes to state table
 	states.set(s, _self);
 
+	debit_user_redemptions_if_necessary(user, new_sWAX_balance);
+
 	return;
 }
 
@@ -573,6 +578,8 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 	if(staker->swax_balance < quantity){
 		check(false, "you are trying to liquify more than you have");
 	}
+
+	eosio::asset new_sWAX_balance = staker->swax_balance - quantity;
 
 	//debit requested amount from their staked balance
 	staker_t.modify(staker, same_payer, [&](auto &_s){
@@ -616,6 +623,8 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 
 	//apply the changes to state table
 	states.set(s, _self);
+
+	debit_user_redemptions_if_necessary(user, new_sWAX_balance);
 
 	return;
 }

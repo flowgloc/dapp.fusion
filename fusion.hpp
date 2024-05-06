@@ -81,6 +81,7 @@ CONTRACT fusion : public contract {
 
 
 		//Functions
+		void debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance);
 		std::string cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp);
 		std::vector<std::string> get_words(std::string memo);
 		bool is_an_admin(const eosio::name& user);
