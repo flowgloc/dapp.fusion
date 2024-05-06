@@ -40,6 +40,7 @@ CONTRACT fusion : public contract {
 		ACTION claimrefunds();
 		ACTION claimrewards(const eosio::name& user);
 		ACTION claimswax(const eosio::name& user);
+		ACTION clearexpired(const eosio::name& user);
 		ACTION distribute();
 		ACTION initconfig();
 		ACTION inittop21();

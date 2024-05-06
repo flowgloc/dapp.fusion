@@ -166,6 +166,27 @@ ACTION fusion::claimswax(const eosio::name& user){
 	check(false, "you have nothing to claim");
 }
 
+ACTION fusion::clearexpired(const eosio::name& user){
+	require_auth(user);
+	sync_epoch();
+	sync_user(user);
+
+	config c = configs.get();
+	state s = states.get();	
+	requests_tbl requests_t = requests_tbl(get_self(), user.value);
+
+	if( requests_t.begin() == requests_t.end() ) return;
+
+	uint64_t upper_bound = s.last_epoch_start_time - c.seconds_between_epochs - 1;
+
+	for( auto itr = requests_t.begin(); itr != requests_t.upper_bound( upper_bound ); itr++ ){
+		if( itr->epoch_id >= upper_bound ) return;
+		
+		itr = requests_t.erase( itr );
+	}	
+
+}
+
 ACTION fusion::distribute(){
 	//should anyone be able to call this?
 
@@ -458,7 +479,7 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 
 	state s = states.get();
 
-	check( s.wax_available_for_rentals.amount >= swax_to_redeem.amount, "not enough instareem funds available" );
+	check( s.wax_available_for_rentals.amount >= swax_to_redeem.amount, "not enough instaredeem funds available" );
 
 	//debit the amount from s.wax_available_for_rentals
 	s.wax_available_for_rentals.amount = safeSubInt64(s.wax_available_for_rentals.amount, swax_to_redeem.amount);
