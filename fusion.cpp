@@ -179,11 +179,12 @@ ACTION fusion::clearexpired(const eosio::name& user){
 
 	uint64_t upper_bound = s.last_epoch_start_time - c.seconds_between_epochs - 1;
 
-	for( auto itr = requests_t.begin(); itr != requests_t.upper_bound( upper_bound ); itr++ ){
-		if( itr->epoch_id >= upper_bound ) return;
-		
-		itr = requests_t.erase( itr );
-	}	
+	auto itr = requests_t.begin();
+	while (itr != requests_t.end()) {
+		if (itr->epoch_id >= upper_bound) break;
+
+		itr = requests_t.erase(itr);
+	}
 
 }
 
