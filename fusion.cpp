@@ -424,6 +424,76 @@ ACTION fusion::inittop21(){
 
 }
 
+/** 
+ *  instaredeem
+ *  by default, when users request redemptions, they get added to the queue
+ *  depending on which epochs have the wax available for redemption
+ *  there is 0 fee
+ *  the instaredeem action allows users to redeem instantly using funds that 
+ *  are inside the dapp contract (avaiable_for_rentals pool), assuming there are 
+ *  enough funds to cover their redemption
+ *  there is a 0.05% fee when using instaredeem. this allows the protocol to utilize
+ *  funds that would normally be used for CPU rentals and staking, in a more efficient manner
+ *  while also helping to maintain the LSWAX peg on the open market
+ */
+ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_redeem){
+	require_auth(user);
+	sync_user(user);
+	sync_epoch();
+
+	//make sure the amount to redeem is not more than their balance
+	auto staker = staker_t.require_find(user.value, "you are not staking any sWAX");
+	check(staker->swax_balance >= swax_to_redeem, "you are trying to redeem more than you have");
+
+    check( swax_to_redeem.amount > 0, "Must redeem a positive quantity" );
+    check( swax_to_redeem.amount < MAX_ASSET_AMOUNT, "quantity too large" );
+
+	//debit requested amount from their staked balance
+	staker_t.modify(staker, same_payer, [&](auto &_s){
+		_s.swax_balance -= swax_to_redeem;
+		_s.last_update = now();
+	});
+
+	state s = states.get();
+
+	check( s.wax_available_for_rentals.amount >= swax_to_redeem.amount, "not enough instareem funds available" );
+
+	//debit the amount from s.wax_available_for_rentals
+	s.wax_available_for_rentals.amount = safeSubInt64(s.wax_available_for_rentals.amount, swax_to_redeem.amount);
+
+	//calculate the 0.05% fee
+	//calculate the remainder for the user
+	double procotol_fee_percentage = (double) 0.005;
+	double user_percentage = (double) 1 - procotol_fee_percentage;
+	double protocol_fee_double = procotol_fee_percentage * (double) swax_to_redeem.amount;
+	double amount_to_transfer_double = user_percentage * swax_to_redeem.amount;
+
+	//TODO: check that int64_t amount_to_transfer_double + protocol_fee_double <= swax_to_redeem
+
+	//TODO: add extra safety check on multiplying these doubles
+
+	//transfer the funds to the user
+	transfer_tokens( user, asset( (int64_t) amount_to_transfer_double, WAX_SYMBOL), WAX_CONTRACT, std::string("your sWAX redemption from waxfusion.io - liquid staking protocol") );
+
+	//add the 0.05% to the revenue_awaiting_distribution
+	s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, (int64_t) protocol_fee_double );
+
+	//set the state
+	states.set(s, _self);
+
+
+    //make sure to account for any conflicts with existing redeem requests
+
+}
+
+/**
+ *  TODO for liquify, liquifyexact, and instaredeem
+ * 	if a user has any existing redemption requests, check if their new balance after liquifying
+ *  will be < the amount they are waiting to redeem
+ *  if so, subtract the delta from their redemption request(s), and subtract it from the awaiting_redemption
+ *  bucket(s) in the relevant epoch(s)
+ */
+
 
 ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 	require_auth(user);
@@ -654,6 +724,9 @@ ACTION fusion::removeadmin(const eosio::name& admin_to_remove){
 * initiates a redemption request
 * the contract will automatically figure out which epoch(s) have enough wax available
 * the user must claim (redeem) their wax within 2 days of it becoming available, or it will be restaked
+* 
+*  TODO: if there is not enough funds in the epochs, also account for the wax in available_for_rentals
+*  need to figure out how to approach that properly since those funds are used for the 0.05% instaredeem
 */ 
 
 ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem){

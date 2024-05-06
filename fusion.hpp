@@ -43,6 +43,7 @@ CONTRACT fusion : public contract {
 		ACTION distribute();
 		ACTION initconfig();
 		ACTION inittop21();
+		ACTION instaredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
 		ACTION liquifyexact(const eosio::name& user, const eosio::asset& quantity, 
 			const eosio::asset& expected_output, const double& max_slippage);
