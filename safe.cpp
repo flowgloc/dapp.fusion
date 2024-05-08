@@ -1,5 +1,19 @@
 #pragma once
 
+double fusion::safeAddDouble(const double& a, const double& b){
+	const double combinedValue = a + b;
+
+	if( (double) MAX_ASSET_AMOUNT - a < b ){
+		/** if the remainder is less than what we're adding, it means there 
+		 *  will be overflow
+		 */
+
+		check(false, "overflow error");
+	}	
+
+	return combinedValue;
+}
+
 int64_t fusion::safeAddInt64(const int64_t& a, const int64_t& b){
 	const int64_t combinedValue = a + b;
 

@@ -225,7 +225,7 @@ ACTION fusion::distribute(){
 	double ecosystem_share = amount_to_distribute - user_allocation - pol_allocation;
 
 	//TODO: safeAddDouble
-	double sum_of_sWAX_and_lsWAX = (double) s.swax_currently_earning.amount + (double) s.swax_currently_backing_lswax.amount;
+	double sum_of_sWAX_and_lsWAX = safeAddDouble( (double) s.swax_currently_earning.amount, (double) s.swax_currently_backing_lswax.amount );
 
 	double swax_currently_earning_allocation = 
 		safeMulDouble( user_allocation, 
@@ -464,7 +464,7 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 	double protocol_fee_double = safeMulDouble( procotol_fee_percentage, (double) swax_to_redeem.amount );
 	double amount_to_transfer_double = safeMulDouble( user_percentage, swax_to_redeem.amount );
 
-	//TODO: check that int64_t amount_to_transfer_double + protocol_fee_double <= swax_to_redeem
+	check( safeAddInt64( (int64_t) amount_to_transfer_double, (int64_t) protocol_fee_double ) <= swax_to_redeem.amount, "error calculating protocol fee" );
 
 	//transfer the funds to the user
 	transfer_tokens( user, asset( (int64_t) amount_to_transfer_double, WAX_SYMBOL), WAX_CONTRACT, std::string("your sWAX redemption from waxfusion.io - liquid staking protocol") );

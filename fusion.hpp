@@ -100,6 +100,7 @@ CONTRACT fusion : public contract {
 		void zero_distribution();
 
 		//Safemath
+		double safeAddDouble(const double& a, const double& b);
 		int64_t safeAddInt64(const int64_t& a, const int64_t& b);
 		double safeDivDouble(const double& a, const double& b);
 		double safeMulDouble(const double& a, const double& b);
