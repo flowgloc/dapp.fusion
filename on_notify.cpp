@@ -401,7 +401,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 		double minimum_output_percentage = (double) 1 - max_slippage;
 		double minimum_output = safeMulDouble( (double) expected_output, minimum_output_percentage );
 
-		check( converted_sWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );  	  		
+		check( converted_sWAX_i64 >= (int64_t) minimum_output, "output would be " + asset(converted_sWAX_i64, SWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, SWAX_SYMBOL).to_string() );	  		
 
   		retire_lswax(quantity.amount);
 

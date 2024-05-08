@@ -94,7 +94,7 @@ ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expecte
 	    double minimum_output_percentage = (double) 1 - max_slippage;
 	    double minimum_output = safeMulDouble( (double) expected_output.amount, minimum_output_percentage );
 
-	    check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );		
+	    check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output would be " + asset(converted_lsWAX_i64, LSWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, LSWAX_SYMBOL).to_string() );		
 
 		issue_lswax(converted_lsWAX_i64, user);
 
@@ -591,7 +591,7 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 	double minimum_output_percentage = (double) 1 - max_slippage;
 	double minimum_output = safeMulDouble( (double) expected_output.amount, minimum_output_percentage );
 
-	check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );
+	check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output would be " + asset(converted_lsWAX_i64, LSWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, LSWAX_SYMBOL).to_string() );
 
 	//subtract swax amount from swax_currently_earning
 	s.swax_currently_earning.amount = safeSubInt64(s.swax_currently_earning.amount, quantity.amount);
