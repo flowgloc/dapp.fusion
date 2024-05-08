@@ -99,12 +99,6 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   	 * 	rate is not 1:1, needs to be fetched from state table
   	 */
 
-	/** 
-	* TODO
-	* add unliquifyexact memo (or add an expected_output / max_slippage param to unliquify memo)
-	* people need to be able to predict outcomes for arb opportunities etc
-	*/  	
-
   	if( memo == "unliquify" ){
   		//front end has to package in a "stake" action before transferring, to make sure they have a row
   		sync_epoch();

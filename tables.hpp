@@ -171,12 +171,7 @@ typedef eosio::multi_index< "producers"_n, producer_info,
 
 /** 
 * redeem_requests table stores requests for redemptions
-* 
-* scoped by user since there is probably 0 reason why a front end would ever need to 
-* display a list of all requests from an epoch
-* and 0 reason why the contract would ever need easy access to this list
-* however there is plenty of reason to get a list of all requests made by a user
-* e.g. showing them their pending requests on a front end without making more than 1 api call
+* scoped by user
 */
 
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] redeem_requests {

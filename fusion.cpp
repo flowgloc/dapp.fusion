@@ -234,26 +234,20 @@ ACTION fusion::distribute(){
 	//increase the backing of lsWAX with the newly issued sWAX
 	s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, (int64_t) autocompounding_allocation );
 
-
-	/** 
-	* TODO: add more safety checks now that the addition of allocating user funds between s/lsWAX has taken place
-	* also need more safemath functions, specifically for adding doubles and multiplying int64_t / double
-	*/
-
-
-
 	//i64 allocations
 	int64_t amount_to_distribute_i64 = (int64_t) amount_to_distribute;
 	int64_t user_alloc_i64 = (int64_t) user_allocation;
-	int64_t swax_earning_alloc_i64 = (int64_t) swax_currently_earning_allocation;
-	int64_t swax_autocompounding_alloc_i64 = (int64_t) autocompounding_allocation;
 	int64_t pol_alloc_i64 = (int64_t) pol_allocation;
 	int64_t eco_alloc_i64 = (int64_t) ecosystem_share;
-
+	int64_t swax_earning_alloc_i64 = (int64_t) swax_currently_earning_allocation;
+	int64_t swax_autocompounding_alloc_i64 = (int64_t) autocompounding_allocation;
+	
 	//check the sum is in range
 	int64_t alloc_check_1 = safeAddInt64(user_alloc_i64, pol_alloc_i64);
 	int64_t alloc_check_2 = safeAddInt64(alloc_check_1, eco_alloc_i64);
-	check( alloc_check_2 <= amount_to_distribute_i64, "allocation check 2 failed" );
+	int64_t alloc_check_3 = safeAddInt64(alloc_check_2, swax_earning_alloc_i64);
+	int64_t alloc_check_4 = safeAddInt64(alloc_check_3, swax_autocompounding_alloc_i64);
+	check( alloc_check_4 <= amount_to_distribute_i64, "allocation check 4 failed" );
 
 	//set revenue_awaiting_distribution to 0
 	s.revenue_awaiting_distribution.amount = 0;
@@ -264,38 +258,7 @@ ACTION fusion::distribute(){
 	//pol share goes to POL_CONTRACT
 	transfer_tokens( POL_CONTRACT, asset(pol_alloc_i64, WAX_SYMBOL), WAX_CONTRACT, std::string("pol allocation from waxfusion distribution") );
 
-	//loop through ecosystem_fund and store each of their share in ecosystem table 
-
-	//old ecosystem fund logic, replaced with transfer to ve33.fusion
-	//remove when everything is finalized
-	/*
-	double total_paid_to_eco = 0;
-	for(auto e : c.ecosystem_fund){
-		double allocation = e.amount * ecosystem_share;
-		int64_t allocation_i64 = (int64_t) allocation;
-		total_paid_to_eco += allocation;
-
-		auto eco_it = eco_t.find(e.beneficiary.value);
-		if( eco_it == eco_t.end() ){
-			eco_t.emplace(get_self(), [&](auto &_eco){
-				_eco.beneficiary = e.beneficiary;
-				_eco.wax_balance = asset(allocation_i64, WAX_SYMBOL);
-				_eco.total_wax_received = asset(allocation_i64, WAX_SYMBOL);		
-			});
-		} else {
-			int64_t new_balance = safeAddInt64(eco_it->wax_balance.amount, allocation_i64);
-			int64_t updated_total = safeAddInt64(eco_it->total_wax_received.amount, allocation_i64);
-
-			eco_t.modify(eco_it, same_payer, [&](auto &_eco){
-				_eco.wax_balance = asset(new_balance, WAX_SYMBOL);
-				_eco.total_wax_received = asset(updated_total, WAX_SYMBOL);
-			});
-		}
-	}
-
-	check( total_paid_to_eco <= ecosystem_share, "overdrawn ecosystem allocation" );
-	*/
-
+	//send ecosystem allocation to another contract to keep logic abstracted
 	transfer_tokens( VE33_CONTRACT, asset(eco_alloc_i64, WAX_SYMBOL), WAX_CONTRACT, std::string("revenue") );
 
 	//create a snapshot
@@ -508,14 +471,6 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
     debit_user_redemptions_if_necessary(user, new_sWAX_balance);
 
 }
-
-/**
- *  TODO for liquify, liquifyexact, and instaredeem
- * 	if a user has any existing redemption requests, check if their new balance after liquifying
- *  will be < the amount they are waiting to redeem
- *  if so, subtract the delta from their redemption request(s), and subtract it from the awaiting_redemption
- *  bucket(s) in the relevant epoch(s)
- */
 
 
 ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
@@ -730,8 +685,6 @@ ACTION fusion::redeem(const eosio::name& user){
 
 	//erase the request
 	req_itr = requests_t.erase(req_itr);
-
-	/* TODO (maybe?): does the epoch itself need to be updated to reflect this change? */
 }
 
 
