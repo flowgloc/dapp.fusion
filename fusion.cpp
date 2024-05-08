@@ -517,7 +517,7 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
 	}
 
-	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX * (double) quantity.amount );
+	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
 	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
 
 	//subtract swax amount from swax_currently_earning
