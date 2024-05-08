@@ -102,6 +102,7 @@ CONTRACT fusion : public contract {
 		//Safemath
 		int64_t safeAddInt64(const int64_t& a, const int64_t& b);
 		double safeDivDouble(const double& a, const double& b);
+		double safeMulDouble(const double& a, const double& b);
 		uint64_t safeMulUInt64(const uint64_t& a, const uint64_t& b);
 		int64_t safeSubInt64(const int64_t& a, const int64_t& b);
 };

@@ -188,9 +188,12 @@ ACTION fusion::clearexpired(const eosio::name& user){
 
 }
 
-ACTION fusion::distribute(){
-	//should anyone be able to call this?
+/**
+* distribute action
+* anyone can call this as long as 24 hours have passed since the last reward distribution
+*/ 
 
+ACTION fusion::distribute(){
 	sync_epoch();
 
 	//get the config
@@ -205,28 +208,27 @@ ACTION fusion::distribute(){
 	}
 
 	if( s.revenue_awaiting_distribution.amount == 0 ){
-		//do a zero distribution (avoid conditional safemath below)
 		zero_distribution();
 		return;
 	}
 
 	//amount to distribute = revenue_awaiting_distribution
 	double amount_to_distribute = (double) s.revenue_awaiting_distribution.amount;
-	double user_allocation = amount_to_distribute * c.user_share;
-	double pol_allocation = amount_to_distribute * c.pol_share;
+	double user_allocation = safeMulDouble(amount_to_distribute, c.user_share);
+	double pol_allocation = safeMulDouble(amount_to_distribute, c.pol_share);
 	double ecosystem_share = amount_to_distribute - user_allocation - pol_allocation;
 
 	double sum_of_sWAX_and_lsWAX = (double) s.swax_currently_earning.amount + (double) s.swax_currently_backing_lswax.amount;
 
 	double swax_currently_earning_allocation = 
-		user_allocation 
-		* 
-		safeDivDouble( (double) s.swax_currently_earning.amount, sum_of_sWAX_and_lsWAX );
+		safeMulDouble( user_allocation, 
+			safeDivDouble( (double) s.swax_currently_earning.amount, sum_of_sWAX_and_lsWAX ) 
+			);
 
 	double autocompounding_allocation = 
-		user_allocation 
-		* 
-		safeDivDouble( (double) s.swax_currently_backing_lswax.amount, sum_of_sWAX_and_lsWAX );		
+		safeMulDouble( user_allocation, 
+			safeDivDouble( (double) s.swax_currently_backing_lswax.amount, sum_of_sWAX_and_lsWAX )
+			);	
 
 	//issue sWAX
 	issue_swax( (int64_t) autocompounding_allocation );
