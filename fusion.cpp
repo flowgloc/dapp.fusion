@@ -87,12 +87,12 @@ ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expecte
 			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
 		}
 
-		double converted_lsWAX_amount = lsWAX_per_sWAX * (double) claimable_wax_amount;
+		double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) claimable_wax_amount );
 		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
 
 	    check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
 	    double minimum_output_percentage = (double) 1 - max_slippage;
-	    double minimum_output = (double) expected_output.amount * minimum_output_percentage;
+	    double minimum_output = safeMulDouble( (double) expected_output.amount, minimum_output_percentage );
 
 	    check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );		
 
@@ -133,6 +133,11 @@ ACTION fusion::claimrewards(const eosio::name& user){
 	check(false, "you have nothing to claim");
 }
 
+/** 
+* claimswax
+* allows a user to autocompound their sWAX by claiming WAX and turning it back into more sWAX 
+*/
+
 ACTION fusion::claimswax(const eosio::name& user){
 	require_auth(user);
 	sync_epoch();
@@ -140,10 +145,6 @@ ACTION fusion::claimswax(const eosio::name& user){
 
 	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
 	if(staker->claimable_wax.amount > 0){
-
-		//we either need to convert their entire claimable balance to swax,
-		//or fetch their row beforehand and then fetch a refreshed version
-		//to calculate the difference after syncing
 
 		int64_t swax_amount_to_claim = staker->claimable_wax.amount;
 		issue_swax(swax_amount_to_claim); 
@@ -165,6 +166,11 @@ ACTION fusion::claimswax(const eosio::name& user){
 
 	check(false, "you have nothing to claim");
 }
+
+/**
+* clearexpired
+* allows a user to erase their expired redemption requests from the redemptions table
+*/  
 
 ACTION fusion::clearexpired(const eosio::name& user){
 	require_auth(user);
@@ -218,6 +224,7 @@ ACTION fusion::distribute(){
 	double pol_allocation = safeMulDouble(amount_to_distribute, c.pol_share);
 	double ecosystem_share = amount_to_distribute - user_allocation - pol_allocation;
 
+	//TODO: safeAddDouble
 	double sum_of_sWAX_and_lsWAX = (double) s.swax_currently_earning.amount + (double) s.swax_currently_backing_lswax.amount;
 
 	double swax_currently_earning_allocation = 
@@ -454,12 +461,10 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 	//calculate the remainder for the user
 	double procotol_fee_percentage = (double) 0.0005;
 	double user_percentage = (double) 1 - procotol_fee_percentage;
-	double protocol_fee_double = procotol_fee_percentage * (double) swax_to_redeem.amount;
-	double amount_to_transfer_double = user_percentage * swax_to_redeem.amount;
+	double protocol_fee_double = safeMulDouble( procotol_fee_percentage, (double) swax_to_redeem.amount );
+	double amount_to_transfer_double = safeMulDouble( user_percentage, swax_to_redeem.amount );
 
 	//TODO: check that int64_t amount_to_transfer_double + protocol_fee_double <= swax_to_redeem
-
-	//TODO: add extra safety check on multiplying these doubles
 
 	//transfer the funds to the user
 	transfer_tokens( user, asset( (int64_t) amount_to_transfer_double, WAX_SYMBOL), WAX_CONTRACT, std::string("your sWAX redemption from waxfusion.io - liquid staking protocol") );
@@ -512,7 +517,7 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
 	}
 
-	double converted_lsWAX_amount = lsWAX_per_sWAX * (double) quantity.amount;
+	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX * (double) quantity.amount );
 	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
 
 	//subtract swax amount from swax_currently_earning
@@ -579,12 +584,12 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
 	}
 
-	double converted_lsWAX_amount = lsWAX_per_sWAX * (double) quantity.amount;
+	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
 	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
 
 	check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
 	double minimum_output_percentage = (double) 1 - max_slippage;
-	double minimum_output = (double) expected_output.amount * minimum_output_percentage;
+	double minimum_output = safeMulDouble( (double) expected_output.amount, minimum_output_percentage );
 
 	check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );
 
@@ -894,6 +899,12 @@ ACTION fusion::setrentprice(const eosio::name& caller, const eosio::asset& cost_
 	action(permission_level{get_self(), "active"_n}, POL_CONTRACT,"setrentprice"_n,std::tuple{ cost_to_rent_1_wax }).send();
 }
 
+/**
+* stake
+* this just opens a row if necessary so we can react to transfers etc
+* also syncs the user if they exist
+*/
+  
 ACTION fusion::stake(const eosio::name& user){
 	require_auth(user);
 
@@ -918,10 +929,6 @@ ACTION fusion::stake(const eosio::name& user){
 */ 
 
 ACTION fusion::stakeallcpu(){
-	//should anyone be able to call this? probably
-
-	//who should receive the CPU?
-
 	sync_epoch();
 
 	//get the last epoch start time
@@ -932,17 +939,6 @@ ACTION fusion::stakeallcpu(){
 	check( now() >= s.next_stakeall_time, ( "next stakeall time is not until " + std::to_string(s.next_stakeall_time) ).c_str() );
 
 	if(s.wax_available_for_rentals.amount > 0){
-		//stake it
-
-		/** 
-		* we can get the cpu contract by taking the last epoch start time (i.e. lets say epoch 3 started)
-		* then find out the cpu contract of the next epoch (epoch 4)
-		* this will also be the same as going back 2 epochs (epoch 1)
-		* the main issue here is we need to make sure this does not cancel any unstakes (the time matches exactly)
-		* so, before we send - we need to check and make sure that 2 epochs ago has been fully returned already
-		*/
-
-		//first need the timestamp AND cpu contract of the current epoch
 
 		//then we can just get the next contract in line and next epoch in line
 		int next_cpu_index = 1;
@@ -965,24 +961,6 @@ ACTION fusion::stakeallcpu(){
 		check( contract_was_found, "error locating cpu contract" );
 		eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
 		check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
-
-
-
-
-		/* This logic is probably not necessary anymore knowing that staking new funds doesnt affect anything */
-
-		/*
-		//then we can also see if there is an epoch that exists with the timetamp from 2 epochs ago
-		uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
-		uint64_t two_epochs_ago = s.last_epoch_start_time - (c.seconds_between_epochs * 2);
-
-		//if so, check that its been fully refunded
-		auto epoch_itr = epochs_t.find(two_epochs_ago);
-		if(epoch_itr != epochs_t.end()){
-			//an epoch was found - make sure it's been refunded
-			check( epoch_itr->total_cpu_funds_returned >= epoch_itr->wax_bucket, (next_cpu_contract.to_string() + " still has funds tied up").c_str() );
-		}
-		*/
 
 		uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
 
@@ -1047,7 +1025,7 @@ ACTION fusion::unstakecpu(){
 	state s = states.get();
 	config c = configs.get();
 
-	//the only one that should ever need unstaking is the one that started prior
+	//the only epoch that should ever need unstaking is the one that started prior to current epoch
 	//calculate the epoch prior to the most recently started one
 	uint64_t epoch_to_check = s.last_epoch_start_time - c.seconds_between_epochs;
 

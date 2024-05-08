@@ -255,10 +255,10 @@ void fusion::sync_user(const eosio::name& user){
       //if the amount to pay out is > 0...
       if(it->swax_earning_bucket.amount > 0){
         //calculate the % of snapshot owned by this user
-        double percentage_allocation = (double) staker->swax_balance.amount / (double) it->total_swax_earning.amount;
+        double percentage_allocation = safeDivDouble( (double) staker->swax_balance.amount, (double) it->total_swax_earning.amount );
 
         //use that to get a wax quantity (needs to be positive)
-        double wax_allocation = (double) it->swax_earning_bucket.amount * percentage_allocation;
+        double wax_allocation = safeMulDouble( (double) it->swax_earning_bucket.amount, percentage_allocation );
        
         //add that quantity to wax_owed_to_user
         wax_owed_to_user = safeAddInt64(wax_owed_to_user, (int64_t) wax_allocation);
