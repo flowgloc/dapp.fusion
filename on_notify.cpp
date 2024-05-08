@@ -37,7 +37,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
 		}
 
-		double converted_lsWAX_amount = lsWAX_per_sWAX * (double) quantity.amount;
+		double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
 		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
 
 		issue_lswax(converted_lsWAX_i64, _self);
@@ -110,8 +110,8 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   		//calculate the conversion rate (amount of sWAX to stake to this user)
   		state s = states.get();
-  		double sWAX_per_lsWAX = safeDivDouble((double) s.swax_currently_backing_lswax.amount, (double) s.liquified_swax.amount);
-  		double converted_sWAX_amount = sWAX_per_lsWAX * (double) quantity.amount;
+  		double sWAX_per_lsWAX = safeDivDouble( (double) s.swax_currently_backing_lswax.amount, (double) s.liquified_swax.amount );
+  		double converted_sWAX_amount = safeMulDouble( sWAX_per_lsWAX, (double) quantity.amount );
   		int64_t converted_sWAX_i64 = (int64_t) converted_sWAX_amount;
 
   		//retire the lsWAX AFTER figuring out the conversion rate
@@ -335,8 +335,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   			days_to_rent = (double) 11 - days_into_current_epoch;
 
   		} else if( epoch_id_to_rent_from == s.last_epoch_start_time - c.seconds_between_epochs ){
-  			//renting from epoch 1 (oldest) and we need to make sure it's less than 11 days old
-  			//check( epoch_itr->time_to_unstake > now(), "it is too late to rent from this epoch, please rent from the next one" );
+  			//renting from epoch 1 (oldest) and we need to make sure it's less than 11 days old  			
   			check( days_into_current_epoch < (double) 4, "it is too late to rent from this epoch, please rent from the next one" );
 
   			//if we reached here, minimum PAYMENT is 1 full day payment (even if rental is less than 1 day)
@@ -346,7 +345,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   			check( false, "you are trying to rent from an invalid epoch" );
   		}
 
-  		double expected_amount_received = (double) s.cost_to_rent_1_wax.amount * (double) wax_amount_to_rent * days_to_rent;
+  		double expected_amount_received = safeMulDouble( (double) s.cost_to_rent_1_wax.amount, safeMulDouble( (double) wax_amount_to_rent, days_to_rent ) );
 
   		double amount_received_double = (double) quantity.amount;
 
@@ -395,12 +394,12 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		//calculate the conversion rate (amount of sWAX to stake to this user)
   		state s = states.get();
   		double sWAX_per_lsWAX = safeDivDouble((double) s.swax_currently_backing_lswax.amount, (double) s.liquified_swax.amount);
-  		double converted_sWAX_amount = sWAX_per_lsWAX * (double) quantity.amount;
+  		double converted_sWAX_amount = safeMulDouble( sWAX_per_lsWAX, (double) quantity.amount );
   		int64_t converted_sWAX_i64 = (int64_t) converted_sWAX_amount;
 
 		check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
 		double minimum_output_percentage = (double) 1 - max_slippage;
-		double minimum_output = (double) expected_output * minimum_output_percentage;
+		double minimum_output = safeMulDouble( (double) expected_output, minimum_output_percentage );
 
 		check( converted_sWAX_i64 >= (int64_t) minimum_output, "output is less than expected_output" );  	  		
 
