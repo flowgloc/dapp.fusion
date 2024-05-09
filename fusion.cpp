@@ -716,8 +716,6 @@ ACTION fusion::removeadmin(const eosio::name& admin_to_remove){
 * the contract will automatically figure out which epoch(s) have enough wax available
 * the user must claim (redeem) their wax within 2 days of it becoming available, or it will be restaked
 * 
-*  TODO: if there is not enough funds in the epochs, also account for the wax in available_for_rentals
-*  need to figure out how to approach that properly since those funds are used for the 0.05% instaredeem
 */ 
 
 ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem){
@@ -857,7 +855,25 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 		if( request_can_be_filled ) break;
 	}	 
 
-	check( request_can_be_filled, "There is not enough wax available to fill this request yet" );
+	if( !request_can_be_filled ){
+		/** make sure there is enough wax in available_for_rentals pool to cover the remainder
+		 *  there should be 0 cases where this this check fails
+		 *  if epochs cant cover it, there should always be enough in available for rentals to 
+		 *  cover the remainder
+		 */ 
+
+		check( s.wax_available_for_rentals.amount >= remaining_amount_to_fill.amount, "Request amount is greater than amount in epochs and rental pool" );
+
+		s.wax_available_for_rentals.amount = safeSubInt64( s.wax_available_for_rentals.amount, remaining_amount_to_fill.amount );
+		states.set(s, _self);
+
+		//debit the swax amount from the user's balance
+		staker_t.modify(staker, same_payer, [&](auto &_s){
+			_s.swax_balance.amount = safeSubInt64( _s.swax_balance.amount, remaining_amount_to_fill.amount );
+		});
+
+		transfer_tokens( user, asset( remaining_amount_to_fill.amount, WAX_SYMBOL ), WAX_CONTRACT, std::string("your redemption from waxfusion.io - liquid staking protocol") );
+	}
 
 }
 
