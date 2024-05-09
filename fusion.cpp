@@ -865,7 +865,7 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 		if(epoch_itr != epochs_t.end()){
 
 			//see if the deadline for redeeming has passed yet
-			if(epoch_itr->time_to_unstake > now()){
+			if(epoch_itr->redemption_period_start_time > now()){
 
 				if(epoch_itr->wax_to_refund < epoch_itr->wax_bucket){
 					//there are still funds available for redemption
