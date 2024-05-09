@@ -51,7 +51,7 @@ CONTRACT fusion : public contract {
 		ACTION reallocate();
 		ACTION redeem(const eosio::name& user);
 		ACTION removeadmin(const eosio::name& admin_to_remove);
-		ACTION reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
+		ACTION reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem, const bool& accept_replacing_prev_requests);
 		ACTION rmvcpucntrct(const eosio::name& contract_to_remove);
 		ACTION setfallback(const eosio::name& caller, const eosio::name& receiver);
 		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);

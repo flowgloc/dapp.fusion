@@ -718,7 +718,7 @@ ACTION fusion::removeadmin(const eosio::name& admin_to_remove){
 * 
 */ 
 
-ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem){
+ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem, const bool& accept_replacing_prev_requests){
 	require_auth(user);
 	sync_user(user);
 	sync_epoch();
@@ -836,6 +836,10 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 
 			if(req_itr != requests_t.end()){
 				//there is a pending request
+
+				if(!accept_replacing_prev_requests){
+					check(false, "you have previous requests but passed 'false' to the accept_replacing_prev_requests param");
+				}
 
 				//subtract the pending amount from epoch_itr->wax_to_refund
 				int64_t updated_refunding_amount = safeSubInt64(epoch_itr->wax_to_refund.amount, req_itr->wax_amount_requested.amount);
