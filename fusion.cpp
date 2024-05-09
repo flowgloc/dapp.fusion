@@ -725,7 +725,6 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 
 	//make sure the amount to redeem is not more than their balance
 	auto staker = staker_t.require_find(user.value, "you are not staking any sWAX");
-	check(staker->swax_balance >= swax_to_redeem, "you are trying to redeem more than you have");
 
     check( swax_to_redeem.amount > 0, "Must redeem a positive quantity" );
     check( swax_to_redeem.amount < MAX_ASSET_AMOUNT, "quantity too large" );
@@ -742,11 +741,79 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 
 	state s = states.get();
 	config c = configs.get();
-
 	requests_tbl requests_t = requests_tbl(get_self(), user.value);
+
+	/** if there is currently a redemption window open, we need to check if 
+	 *  this user has a request from this window. if they do, it should be
+	 *  automatically claimed and transferred to them, to avoid tying up 
+	 *  2x the redemption amount and causing issues for other users who 
+	 *  need to redeem
+	 */
 
 	bool request_can_be_filled = false;
 	eosio::asset remaining_amount_to_fill = swax_to_redeem;
+
+	uint64_t redemption_start_time = s.last_epoch_start_time;
+	uint64_t redemption_end_time = s.last_epoch_start_time + c.redemption_period_length_seconds;
+	uint64_t epoch_to_claim_from = s.last_epoch_start_time - c.seconds_between_epochs;
+ 
+	if( now() < redemption_end_time ){
+		//there is currently a redemption window open
+		//if this user has a request in that window, handle it before proceeding
+
+		auto epoch_itr = epochs_t.find( epoch_to_claim_from );
+
+		if( epoch_itr != epochs_t.end() ){
+
+			auto req_itr = requests_t.find( epoch_to_claim_from );		
+
+			if( req_itr != requests_t.end() ){
+				//they have a request from this redemption window
+
+				//make sure the request amount <= their swax balance
+				//this should never actually happen
+				check( req_itr->wax_amount_requested.amount <= staker->swax_balance.amount, "you have a pending request > your swax balance" );
+
+				//make sure the redemption pool >= the request amount
+				//the only time this should ever happen is if the CPU contract has not returned the funds yet, which should never really
+				//be more than a 5-10 minute window on a given week
+				check( s.wax_for_redemption.amount >= req_itr->wax_amount_requested.amount, "redemption pool is < your pending request" );
+
+				if( req_itr->wax_amount_requested.amount >= remaining_amount_to_fill.amount ){
+					request_can_be_filled = true;
+				} else {
+					remaining_amount_to_fill.amount = safeSubInt64( remaining_amount_to_fill.amount, req_itr->wax_amount_requested.amount );
+				}
+
+				s.wax_for_redemption.amount = safeSubInt64( s.wax_for_redemption.amount, req_itr->wax_amount_requested.amount );
+
+				epochs_t.modify( epoch_itr, same_payer, [&](auto &_e){
+					_e.wax_to_refund.amount = safeSubInt64( _e.wax_to_refund.amount, req_itr->wax_amount_requested.amount );
+				});
+
+				transfer_tokens( user, req_itr->wax_amount_requested, WAX_CONTRACT, std::string("your redemption from waxfusion.io - liquid staking protocol") );
+
+				staker_t.modify(staker, same_payer, [&](auto &_s){
+					_s.swax_balance.amount = safeSubInt64( _s.swax_balance.amount, req_itr->wax_amount_requested.amount );
+				});
+
+				req_itr = requests_t.erase( req_itr );
+
+				//TODO: need to make sure staker itr is refreshed after moving forward
+
+			}
+
+		}	
+	}
+
+	if( request_can_be_filled ){
+		states.set(s, _self);
+		return;
+	}
+
+	auto staker_refreshed = staker_t.require_find(user.value, "you are not staking any sWAX");
+	check(staker_refreshed->swax_balance >= remaining_amount_to_fill, "you are trying to redeem more than you have");	
+
 	uint64_t epoch_to_request_from = s.last_epoch_start_time - c.seconds_between_epochs;
 
 	std::vector<uint64_t> epochs_to_check = {
@@ -865,15 +932,16 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 		check( s.wax_available_for_rentals.amount >= remaining_amount_to_fill.amount, "Request amount is greater than amount in epochs and rental pool" );
 
 		s.wax_available_for_rentals.amount = safeSubInt64( s.wax_available_for_rentals.amount, remaining_amount_to_fill.amount );
-		states.set(s, _self);
 
 		//debit the swax amount from the user's balance
-		staker_t.modify(staker, same_payer, [&](auto &_s){
+		staker_t.modify(staker_refreshed, same_payer, [&](auto &_s){
 			_s.swax_balance.amount = safeSubInt64( _s.swax_balance.amount, remaining_amount_to_fill.amount );
 		});
 
 		transfer_tokens( user, asset( remaining_amount_to_fill.amount, WAX_SYMBOL ), WAX_CONTRACT, std::string("your redemption from waxfusion.io - liquid staking protocol") );
 	}
+
+	states.set(s, _self);
 
 }
 
