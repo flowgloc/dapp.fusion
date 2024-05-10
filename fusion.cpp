@@ -135,7 +135,7 @@ ACTION fusion::claimrewards(const eosio::name& user){
 
 /** 
 * claimswax
-* allows a user to autocompound their sWAX by claiming WAX and turning it back into more sWAX 
+* allows a user to compound their sWAX by claiming WAX and turning it back into more sWAX 
 */
 
 ACTION fusion::claimswax(const eosio::name& user){
@@ -202,10 +202,7 @@ ACTION fusion::clearexpired(const eosio::name& user){
 ACTION fusion::distribute(){
 	sync_epoch();
 
-	//get the config
 	config c = configs.get();
-
-	//get the state
 	state s = states.get();
 
 	//make sure its been long enough since the last distribution
@@ -224,7 +221,8 @@ ACTION fusion::distribute(){
 	double pol_allocation = safeMulDouble(amount_to_distribute, c.pol_share);
 	double ecosystem_share = amount_to_distribute - user_allocation - pol_allocation;
 
-	//TODO: safeAddDouble
+	//TODO: extra check to make sure the allocation percentages do not add up to > (double) 1
+
 	double sum_of_sWAX_and_lsWAX = safeAddDouble( (double) s.swax_currently_earning.amount, (double) s.swax_currently_backing_lswax.amount );
 
 	double swax_currently_earning_allocation = 
@@ -619,11 +617,8 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 */ 
 
 ACTION fusion::reallocate(){
-	//should anyone be able to call this? all it does is move unredeemed to available_for_rental, so probably yes
-
 	sync_epoch();
 
-	//get the last epoch start time
 	state s = states.get();
 	config c = configs.get();
 
@@ -798,8 +793,6 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 				});
 
 				req_itr = requests_t.erase( req_itr );
-
-				//TODO: need to make sure staker itr is refreshed after moving forward
 
 			}
 

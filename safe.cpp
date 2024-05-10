@@ -29,7 +29,7 @@ int64_t fusion::safeAddInt64(const int64_t& a, const int64_t& b){
 }
 
 double fusion::safeDivDouble(const double& a, const double& b){
-	if(b == 0){
+	if( b == (double) 0 ){
 		check( false, "cant divide double by 0" );
 	}
 
