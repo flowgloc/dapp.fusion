@@ -235,8 +235,10 @@ void fusion::sync_epoch(){
 void fusion::sync_user(const eosio::name& user){
   auto staker = staker_t.require_find(user.value, "you need to use the stake action first");
 
+  const uint64_t lower_bound_timestamp = staker->last_update + 1;
+
   //is their last_update < last_payout ?
-  auto low_itr = snaps_t.lower_bound(staker->last_update + 1);
+  auto low_itr = snaps_t.lower_bound( lower_bound_timestamp );
 
   if(low_itr == snaps_t.end()) return;
 
@@ -250,8 +252,9 @@ void fusion::sync_user(const eosio::name& user){
   if(staker->swax_balance.amount > 0){
 
     for(auto it = low_itr; it != snaps_t.end(); it++){
-      //if the amount to pay out is > 0...
-      if(it->swax_earning_bucket.amount > 0){
+      //only calculate if there was sWAX earning
+      //redundant safety check to make sure the snapshot timestamp is eligible
+      if(it->swax_earning_bucket.amount > 0 && it->timestamp >= lower_bound_timestamp){
         //calculate the % of snapshot owned by this user
         double percentage_allocation = safeDivDouble( (double) staker->swax_balance.amount, (double) it->total_swax_earning.amount );
 
