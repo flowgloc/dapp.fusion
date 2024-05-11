@@ -201,17 +201,15 @@ void fusion::sync_epoch(){
   //calculate when the next is supposed to start
   uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
 
-  //is now() >= that?
   if( now() >= next_epoch_start_time ){
-    //if so, update last epoch start time
+
     s.last_epoch_start_time = next_epoch_start_time;
     s.current_cpu_contract = next_cpu_contract;
     states.set(s, _self);
 
-    /* also actually create the new epoch here (it should already exist because of CPU staking) */
-
     auto epoch_itr = epochs_t.find(next_epoch_start_time);
 
+    //this epoch should already exist due to CPU staking, but there's a possibility no CPU has been staked to it yet
     if(epoch_itr == epochs_t.end()){
 
       epochs_t.emplace(get_self(), [&](auto &_e){
