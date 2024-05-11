@@ -246,15 +246,18 @@ ACTION fusion::distribute(){
 	int64_t user_alloc_i64 = (int64_t) user_allocation;
 	int64_t pol_alloc_i64 = (int64_t) pol_allocation;
 	int64_t eco_alloc_i64 = (int64_t) ecosystem_share;
+
 	int64_t swax_earning_alloc_i64 = (int64_t) swax_currently_earning_allocation;
 	int64_t swax_autocompounding_alloc_i64 = (int64_t) autocompounding_allocation;
 	
-	//check the sum is in range
+	//check the total sum is in range
 	int64_t alloc_check_1 = safeAddInt64(user_alloc_i64, pol_alloc_i64);
 	int64_t alloc_check_2 = safeAddInt64(alloc_check_1, eco_alloc_i64);
-	int64_t alloc_check_3 = safeAddInt64(alloc_check_2, swax_earning_alloc_i64);
-	int64_t alloc_check_4 = safeAddInt64(alloc_check_3, swax_autocompounding_alloc_i64);
-	check( alloc_check_4 <= amount_to_distribute_i64, "allocation check 4 failed" );
+	check( alloc_check_2 <= amount_to_distribute_i64, "allocation check 2 failed" );
+
+	//check that the user sums are <= the user allocation
+	int64_t alloc_check_3 = safeAddInt64(swax_autocompounding_alloc_i64, swax_earning_alloc_i64);
+	check( alloc_check_3 <= user_alloc_i64, "allocation check 3 failed" );
 
 	//set revenue_awaiting_distribution to 0
 	s.revenue_awaiting_distribution.amount = 0;
@@ -300,8 +303,6 @@ ACTION fusion::initconfig(){
 	eosio::check(!configs.exists(), "Config already exists");
 	eosio::check(!states.exists(), "State already exists");
 
-	double eco_split = (double) 1 / (double) 6;
-
 	config c{};
 	c.minimum_stake_amount = eosio::asset(100000000, WAX_SYMBOL);
 	c.minimum_unliquify_amount = eosio::asset(100000000, LSWAX_SYMBOL);
@@ -311,14 +312,8 @@ ACTION fusion::initconfig(){
 	c.cpu_rental_epoch_length_seconds = 60 * 60 * 24 * 14; /* 14 days */
 	c.seconds_between_epochs = 60 * 60 * 24 * 7; /* 7 days */
 	c.user_share = 0.85;
-	c.pol_share = 0.1;
+	c.pol_share = 0.07;
 	c.ecosystem_fund = {
-		{"nefty"_n, eco_split },
-		{"hive"_n, eco_split },
-		{"waxdao"_n, eco_split },
-		{"wombat"_n, eco_split },
-		{"taco"_n, eco_split },
-		{"alcor"_n, eco_split }
 	};
 	c.admin_wallets = {
 		"guild.waxdao"_n,
@@ -965,6 +960,21 @@ ACTION fusion::setfallback(const eosio::name& caller, const eosio::name& receive
 	config c = configs.get();
 	c.fallback_cpu_receiver = receiver;
 	configs.set(c, _self);
+}
+
+
+/**
+* setpolshare
+* Adjusts the percentage of revenue that goes to POL, within a limited range of 5-10%
+*/
+
+ACTION fusion::setpolshare(const double& pol_share){
+	require_auth( _self );
+	check( pol_share >= (double) 0.05 && pol_share <= (double) 0.1, "acceptable range is 5-10%" );
+
+	config c = configs.get();
+	c.pol_share = pol_share;
+	configs.set(c, _self);	
 }
 
 ACTION fusion::setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax){
