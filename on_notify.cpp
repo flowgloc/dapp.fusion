@@ -398,6 +398,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		int64_t converted_sWAX_i64 = (int64_t) converted_sWAX_amount;
 
 		check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
+		check( expected_output > (uint64_t) 0 && expected_output <= MAX_ASSET_AMOUNT_U64, "expected output is out of range" );
 		double minimum_output_percentage = (double) 1 - max_slippage;
 		double minimum_output = safeMulDouble( (double) expected_output, minimum_output_percentage );
 

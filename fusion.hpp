@@ -1,6 +1,7 @@
 #pragma once
 
 #define CONTRACT_NAME "fusion"
+#define DEBUG true
 #define mix64to128(a, b) (uint128_t(a) << 64 | uint128_t(b))
 
 #include <eosio/eosio.hpp>
