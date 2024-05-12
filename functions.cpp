@@ -327,7 +327,15 @@ void fusion::sync_tvl(){
   s3.total_wax_owed = total_wax_owed;
   s3.contract_wax_balance = contract_wax_balance;
 
-  if( s3.last_update + ( 60 * 30 ) < now() ){ /* if 30 mins have passed, create a snapshot of state */
+  uint64_t last_key = 0;
+  auto snap_it = state_snaps_t.end();
+
+  if(state_snaps_t.begin() != state_snaps_t.end()){
+      snap_it --;
+      last_key = snap_it->timestamp;
+  }  
+
+  if( last_key + ( 60 * 30 ) < now() ){ /* if 30 mins have passed, create a snapshot of state */
     state_snaps_t.emplace(_self, [&](auto &_snap){
       _snap.timestamp = now();
       _snap.total_wax_owed = total_wax_owed;
