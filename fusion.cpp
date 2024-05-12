@@ -3,7 +3,6 @@
 #include "safe.cpp"
 #include "on_notify.cpp"
 
-
 ACTION fusion::addadmin(const eosio::name& admin_to_add){
 	require_auth(_self);
 	check( is_account(admin_to_add), "admin_to_add is not a wax account" );
@@ -73,6 +72,8 @@ ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expecte
 	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
 	if(staker->claimable_wax.amount > 0){
 
+		debit_total_claimable_wax( staker->claimable_wax );
+
 		int64_t claimable_wax_amount = staker->claimable_wax.amount;
 		issue_swax(claimable_wax_amount);
 
@@ -122,6 +123,7 @@ ACTION fusion::claimrewards(const eosio::name& user){
 	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
 	if(staker->claimable_wax.amount > 0){
 		transfer_tokens( user, staker->claimable_wax, WAX_CONTRACT, std::string("your sWAX reward claim from waxfusion.io - liquid staking protocol") );
+		debit_total_claimable_wax( staker->claimable_wax );
 
 		staker_t.modify(staker, same_payer, [&](auto &_s){
 			_s.claimable_wax.amount = 0;
@@ -145,6 +147,8 @@ ACTION fusion::claimswax(const eosio::name& user){
 
 	auto staker = staker_t.require_find(user.value, "you don't have anything staked here");
 	if(staker->claimable_wax.amount > 0){
+
+		debit_total_claimable_wax( staker->claimable_wax );
 
 		int64_t swax_amount_to_claim = staker->claimable_wax.amount;
 		issue_swax(swax_amount_to_claim); 
@@ -213,7 +217,7 @@ ACTION fusion::createfarms(){
 
 	if(incentives_t.begin() != incentives_t.end()){
 		it --;
-	    next_key = it->id; //+ 1;
+	    next_key = it->id; //+ 1; TODO add back the +1 after first farm is funded
 	}
 
 	double total_parts = 0.0;
@@ -458,6 +462,37 @@ ACTION fusion::initstate2(){
 	s2.total_value_locked = ZERO_WAX;
 
 	state_s_2.set(s2, _self);
+}
+
+ACTION fusion::initstate3(){
+	require_auth(get_self());
+
+	eosio::check(!state_s_3.exists(), "State3 already exists");
+
+	eosio::asset total_claimable_wax = ZERO_WAX;
+
+	/** total wax owed:
+	 *  available_for_rentals
+	 *  revenue_awaiting_distribution
+	 *  claimable_wax
+	 *  wax_for_redemption
+	 *  user_funds_bucket
+	 */
+
+
+	if(staker_t.begin() != staker_t.end()){
+		for(auto itr = staker_t.begin(); itr != staker_t.end(); itr++){
+			total_claimable_wax.amount = safeAddInt64( total_claimable_wax.amount, itr->claimable_wax.amount );
+		}
+	}
+
+	state3 s3{};
+	s3.total_claimable_wax = total_claimable_wax;
+	s3.total_wax_owed = ZERO_WAX;
+	s3.contract_wax_balance = ZERO_WAX;
+	s3.last_update = 0;
+
+	state_s_3.set(s3, _self);
 }
 
 ACTION fusion::inittop21(){
@@ -1247,6 +1282,17 @@ ACTION fusion::sync(const eosio::name& caller){
 	require_auth( caller );
 	check( is_an_admin( caller ), ( caller.to_string() + " is not an admin" ).c_str() );
 	sync_epoch();
+}
+
+/**
+* synctvl
+* aggregated data related to amount of WAX locked across all protocol contracts
+*/ 
+
+ACTION fusion::synctvl(const eosio::name& caller){
+	require_auth( caller );
+	check( is_an_admin( caller ), ( caller.to_string() + " is not an admin" ).c_str() );
+	sync_tvl();
 }
 
 ACTION fusion::unstakecpu(){

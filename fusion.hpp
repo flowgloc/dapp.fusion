@@ -29,8 +29,10 @@ CONTRACT fusion : public contract {
 		fusion(name receiver, name code, datastream<const char *> ds):
 		contract(receiver, code, ds),
 		configs(receiver, receiver.value),
+		pol_state_s_2(POL_CONTRACT, POL_CONTRACT.value),
 		states(receiver, receiver.value),
 		state_s_2(receiver, receiver.value),
+		state_s_3(receiver, receiver.value),
 		top21_s(receiver, receiver.value)
 		{}		
 
@@ -47,6 +49,7 @@ CONTRACT fusion : public contract {
 		ACTION distribute();
 		ACTION initconfig();
 		ACTION initstate2();
+		ACTION initstate3();
 		ACTION inittop21();
 		ACTION instaredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
@@ -65,6 +68,7 @@ CONTRACT fusion : public contract {
 		ACTION stake(const eosio::name& user);
 		ACTION stakeallcpu();
 		ACTION sync(const eosio::name& caller);
+		ACTION synctvl(const eosio::name& caller);
 		ACTION unstakecpu();
 		ACTION updatetop21();
 
@@ -76,8 +80,10 @@ CONTRACT fusion : public contract {
 
 		//Singletons
 		config_singleton configs;
+		pol_contract::state_singleton_2 pol_state_s_2;
 		state_singleton states;
 		state_singleton_2 state_s_2;
+		state_singleton_3 state_s_3;
 		top21_singleton top21_s;
 
 		//Multi Index Tables
@@ -90,10 +96,13 @@ CONTRACT fusion : public contract {
 		snaps_table snaps_t = snaps_table(get_self(), get_self().value);
 		producers_table _producers = producers_table(SYSTEM_CONTRACT, SYSTEM_CONTRACT.value);
 		staker_table staker_t = staker_table(get_self(), get_self().value);
+		state_snaps_table state_snaps_t = state_snaps_table(get_self(), get_self().value);
 
 
 		//Functions
 		void create_alcor_farm(const uint64_t& poolId, const eosio::symbol& token_symbol, const eosio::name& token_contract);
+		void credit_total_claimable_wax(const eosio::asset& amount_to_credit);
+		void debit_total_claimable_wax(const eosio::asset& amount_to_debit);
 		void debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance);
 		std::string cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp);
 		std::vector<std::string> get_words(std::string memo);
@@ -106,6 +115,7 @@ CONTRACT fusion : public contract {
 		void retire_lswax(const int64_t& amount);
 		void retire_swax(const int64_t& amount);
 		void sync_epoch();
+		void sync_tvl();
 		void sync_user(const eosio::name& user);
 		void transfer_tokens(const name& user, const asset& amount_to_send, const name& contract, const std::string& memo);
 		void validate_token(const eosio::symbol& symbol, const eosio::name& contract);

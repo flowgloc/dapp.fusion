@@ -48,6 +48,27 @@ namespace alcor_contract {
   typedef eosio::multi_index< "pools"_n, pools_struct> pools_table;
 }
 
+namespace pol_contract {
+  struct [[eosio::table]] state2 {
+    eosio::asset      wax_allocated_to_rentals;
+    eosio::asset      pending_refunds;
+
+
+    EOSLIB_SERIALIZE(state2,  (wax_allocated_to_rentals)
+                              (pending_refunds)
+                            )
+  };
+  using state_singleton_2 = eosio::singleton<"state2"_n, state2>;  
+}
+
+struct [[eosio::table]] account {
+  eosio::asset    balance;
+
+  uint64_t primary_key()const { return balance.symbol.code().raw(); }
+};
+typedef eosio::multi_index< "accounts"_n, account > accounts;
+
+
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
   eosio::asset                      minimum_stake_amount;
   eosio::asset                      minimum_unliquify_amount;
@@ -343,6 +364,30 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state2 {
                           )
 };
 using state_singleton_2 = eosio::singleton<"state2"_n, state2>;
+
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state3 {
+  eosio::asset      total_claimable_wax;
+  eosio::asset      total_wax_owed;
+  eosio::asset      contract_wax_balance;
+  uint64_t          last_update;
+
+  EOSLIB_SERIALIZE(state3,  (total_claimable_wax)
+                            (total_wax_owed)
+                            (contract_wax_balance)
+                            (last_update)
+                          )
+};
+using state_singleton_3 = eosio::singleton<"state3"_n, state3>;
+
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] statesnaps {
+  uint64_t          timestamp;
+  eosio::asset      total_wax_owed;
+  eosio::asset      contract_wax_balance;
+  
+  uint64_t primary_key() const { return timestamp; }
+};
+using state_snaps_table = eosio::multi_index<"statesnaps"_n, statesnaps
+>;
 
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] top21 {
   std::vector<eosio::name>    block_producers;

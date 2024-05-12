@@ -221,13 +221,15 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		auto epoch_itr = epochs_t.require_find(relevant_epoch, "could not locate relevant epoch");
 
   		/* TODO: fallback logic to check other epochs and see if a match can be found */
-
+  		while( epoch_itr->cpu_wallet != from ){
+  			epoch_itr --;
+  		}
 
   		//make sure the cpu contract is a match
   		check( epoch_itr->cpu_wallet == from, "sender does not match wallet linked to epoch" );
 
-  		//make sure cpu funds were not returned yet
-  		check( epoch_itr->total_cpu_funds_returned < epoch_itr->wax_bucket, "funds were already returned for this epoch" );
+  		//check( epoch_itr->total_cpu_funds_returned < epoch_itr->wax_bucket, 
+  		//	( "funds were already returned for epoch " + std::to_string(epoch_itr->start_time) + " by " + epoch_itr->cpu_wallet.to_string() ).c_str() );
 
   		//make sure the amount received is the amount expected
 

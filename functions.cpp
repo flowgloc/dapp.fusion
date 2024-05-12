@@ -7,6 +7,28 @@ void fusion::create_alcor_farm(const uint64_t& poolId, const eosio::symbol& toke
   return;
 }
 
+void fusion::credit_total_claimable_wax(const eosio::asset& amount_to_credit){
+  if(amount_to_credit.amount > 0 && amount_to_credit.amount <= MAX_ASSET_AMOUNT_U64){
+    state3 s3 = state_s_3.get();
+
+    s3.total_claimable_wax.amount = safeAddInt64( s3.total_claimable_wax.amount, amount_to_credit.amount );
+
+    state_s_3.set(s3, _self);
+  }
+  return;
+}
+
+void fusion::debit_total_claimable_wax(const eosio::asset& amount_to_debit){
+  if(amount_to_debit.amount > 0 && amount_to_debit.amount <= MAX_ASSET_AMOUNT_U64){
+    state3 s3 = state_s_3.get();
+
+    s3.total_claimable_wax.amount = safeSubInt64( s3.total_claimable_wax.amount, amount_to_debit.amount );
+
+    state_s_3.set(s3, _self);
+  }
+  return;
+}
+
 void fusion::debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance){
   //need to know which epochs to check
   state s = states.get();
@@ -239,6 +261,85 @@ void fusion::sync_epoch(){
   return;
 }
 
+/**
+* sync_tvl
+* updates the total value locked in the state2 singleton
+* total_value_locked does not necessarily reflect the current state of the chain,
+* but sync_tvl can be called often to periodically sync to the chain state
+*/ 
+
+void fusion::sync_tvl(){
+  config c = configs.get();
+  state s = states.get();
+  state2 s2 = state_s_2.get();
+  state3 s3 = state_s_3.get();
+
+  eosio::asset total_value_locked = ZERO_WAX;
+  eosio::asset contract_wax_balance = ZERO_WAX;
+  eosio::asset total_wax_owed = ZERO_WAX;
+
+  //wax balance of this contract
+  accounts account_t = accounts(WAX_CONTRACT, _self.value);
+  const uint64_t raw_token_symbol = WAX_SYMBOL.code().raw();
+  auto it = account_t.find(raw_token_symbol);
+  if(it != account_t.end()){
+    total_value_locked.amount = safeAddInt64( total_value_locked.amount, it->balance.amount );
+    contract_wax_balance = it->balance;
+  }
+
+  //wax balance of pol.fusion
+  accounts account_t_2 = accounts(WAX_CONTRACT, POL_CONTRACT.value);
+  auto it_2 = account_t_2.find(raw_token_symbol);
+  if(it_2 != account_t_2.end()){
+    total_value_locked.amount = safeAddInt64( total_value_locked.amount, it_2->balance.amount );
+  }  
+
+  //total amount in both columns from pol_state_s_2
+  pol_contract::state2 ps2 = pol_state_s_2.get();
+  total_value_locked.amount = safeAddInt64( total_value_locked.amount, ps2.wax_allocated_to_rentals.amount );
+  total_value_locked.amount = safeAddInt64( total_value_locked.amount, ps2.pending_refunds.amount );
+
+  //total wax_bucket from the current 3 epochs
+  uint64_t epoch_to_request_from = s.last_epoch_start_time - c.seconds_between_epochs;
+
+  std::vector<uint64_t> epochs_to_check = {
+    epoch_to_request_from,
+    epoch_to_request_from + c.seconds_between_epochs,
+    epoch_to_request_from + ( c.seconds_between_epochs * 2 )
+  };
+
+  for(uint64_t ep : epochs_to_check){
+    auto epoch_itr = epochs_t.find(ep);
+
+    if(epoch_itr != epochs_t.end()){
+      total_value_locked.amount = safeAddInt64( total_value_locked.amount, epoch_itr->wax_bucket.amount );
+    } 
+  }   
+
+  s2.total_value_locked = total_value_locked;
+  state_s_2.set(s2, _self);
+
+  total_wax_owed.amount = safeAddInt64( total_wax_owed.amount, s.wax_available_for_rentals.amount );
+  total_wax_owed.amount = safeAddInt64( total_wax_owed.amount, s.revenue_awaiting_distribution.amount );
+  total_wax_owed.amount = safeAddInt64( total_wax_owed.amount, s.wax_for_redemption.amount );
+  total_wax_owed.amount = safeAddInt64( total_wax_owed.amount, s.user_funds_bucket.amount );
+  total_wax_owed.amount = safeAddInt64( total_wax_owed.amount, s3.total_claimable_wax.amount );
+  s3.total_wax_owed = total_wax_owed;
+  s3.contract_wax_balance = contract_wax_balance;
+
+  if( s3.last_update + ( 60 * 30 ) < now() ){ /* if 30 mins have passed, create a snapshot of state */
+    state_snaps_t.emplace(_self, [&](auto &_snap){
+      _snap.timestamp = now();
+      _snap.total_wax_owed = total_wax_owed;
+      _snap.contract_wax_balance = contract_wax_balance;
+    });
+  }
+
+  s3.last_update = now();
+  state_s_3.set(s3, _self);
+
+}
+
 void fusion::sync_user(const eosio::name& user){
   auto staker = staker_t.require_find(user.value, "you need to use the stake action first");
 
@@ -285,6 +386,8 @@ void fusion::sync_user(const eosio::name& user){
     _s.claimable_wax = claimable_wax;
     _s.last_update = now();
   });
+
+  credit_total_claimable_wax( eosio::asset(wax_owed_to_user, WAX_SYMBOL) );
 
   //debit the user bucket in state
   s.user_funds_bucket.amount = safeSubInt64(s.user_funds_bucket.amount, wax_owed_to_user);
