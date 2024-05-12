@@ -195,6 +195,65 @@ ACTION fusion::clearexpired(const eosio::name& user){
 }
 
 /**
+* createfarms
+* can be called by anyone
+* distributes incentives from the incentives_bucket into new alcor farms
+*/
+
+ACTION fusion::createfarms(){
+	require_auth( _self ); /* TODO: remove require_auth after testing */
+	sync_epoch();
+	state2 s2 = state_s_2.get();
+
+	check( s2.last_incentive_distribution + LP_FARM_DURATION_SECONDS < now(), "hasn't been 1 week since last farms were created");
+	check( s2.incentives_bucket.amount > 0, "no lswax in the incentives_bucket" );
+
+	uint64_t next_key = 0;
+	auto it = incentives_t.end();
+
+	if(incentives_t.begin() != incentives_t.end()){
+		it --;
+	    next_key = it->id; //+ 1;
+	}
+
+	double total_parts = 0.0;
+	int64_t total_lswax_allocated = 0;
+
+	for(auto lp_itr = lpfarms_t.begin(); lp_itr != lpfarms_t.end(); lp_itr++){
+		total_parts = safeAddDouble(total_parts, lp_itr->parts_to_allocate);
+	}
+
+	check( total_parts > (double) 0.0, "no parts to allocate" );
+
+	for(auto lp_itr = lpfarms_t.begin(); lp_itr != lpfarms_t.end(); lp_itr++){
+
+		double farm_share_percentage = safeDivDouble( lp_itr->parts_to_allocate, total_parts );
+
+		double lswax_allocation_double = safeMulDouble( (double) s2.incentives_bucket.amount, farm_share_percentage );
+		int64_t lswax_allocation_i64 = (int64_t) lswax_allocation_double;
+
+		total_lswax_allocated = safeAddInt64( total_lswax_allocated, lswax_allocation_i64 );
+		const std::string memo = "incentreward#" + std::to_string( next_key );
+
+		//create_alcor_farm(lp_itr->poolId, lp_itr->symbol_to_incentivize, lp_itr->contract_to_incentivize);
+
+		auto alcor_itr = incentives_t.find(next_key);
+		check( alcor_itr->poolId == lp_itr->poolId, ("poolId for " + lp_itr->symbol_to_incentivize.code().to_string() + " doesn't match").c_str() );
+
+		transfer_tokens( ALCOR_CONTRACT, asset(lswax_allocation_i64, LSWAX_SYMBOL), TOKEN_CONTRACT, memo );
+
+		next_key ++;	
+	}	
+
+	check(total_lswax_allocated <= s2.incentives_bucket.amount, "overallocation of incentives_bucket");
+
+	s2.incentives_bucket = ZERO_LSWAX;
+	s2.last_incentive_distribution = now();
+	state_s_2.set(s2, _self);
+	
+}
+
+/**
 * distribute action
 * anyone can call this as long as 24 hours have passed since the last reward distribution
 */ 
@@ -204,6 +263,7 @@ ACTION fusion::distribute(){
 
 	config c = configs.get();
 	state s = states.get();
+	state2 s2 = state_s_2.get();
 
 	//make sure its been long enough since the last distribution
 	if( s.next_distribution > now() ){
@@ -236,7 +296,8 @@ ACTION fusion::distribute(){
 			);	
 
 	//issue sWAX
-	issue_swax( (int64_t) autocompounding_allocation );
+	int64_t swax_amount_to_issue = safeAddInt64( (int64_t) autocompounding_allocation, (int64_t) ecosystem_share );
+	issue_swax( swax_amount_to_issue );
 
 	//increase the backing of lsWAX with the newly issued sWAX
 	s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, (int64_t) autocompounding_allocation );
@@ -268,8 +329,26 @@ ACTION fusion::distribute(){
 	//pol share goes to POL_CONTRACT
 	transfer_tokens( POL_CONTRACT, asset(pol_alloc_i64, WAX_SYMBOL), WAX_CONTRACT, std::string("pol allocation from waxfusion distribution") );
 
-	//send ecosystem allocation to another contract to keep logic abstracted
-	transfer_tokens( VE33_CONTRACT, asset(eco_alloc_i64, WAX_SYMBOL), WAX_CONTRACT, std::string("revenue") );
+	//incentives lsWAX should be issued at the new rate instead of autocompounding it immediately after minting it
+	double lsWAX_per_sWAX;
+
+	//need to account for initial period where the values are still 0
+	if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
+		lsWAX_per_sWAX = (double) 1;
+	} else {
+		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
+	}
+
+	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, ecosystem_share );
+	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+
+	issue_lswax(converted_lsWAX_i64, _self);
+
+	//make sure ecosystems lswax gets added to incentives_bucket
+	s2.incentives_bucket.amount = safeAddInt64( s2.incentives_bucket.amount, converted_lsWAX_i64 );	
+
+	s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, eco_alloc_i64 );
+	s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);	
 
 	//create a snapshot
 	snaps_t.emplace(get_self(), [&](auto &_snap){
@@ -288,9 +367,10 @@ ACTION fusion::distribute(){
 	//update next_dist in the state table
 	s.next_distribution += c.seconds_between_distributions;
 
-    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, swax_autocompounding_alloc_i64);
+    s.wax_available_for_rentals.amount = safeAddInt64(s.wax_available_for_rentals.amount, swax_amount_to_issue);
 
     states.set(s, _self);
+    state_s_2.set(s2, _self);
 
 	return;	
 
@@ -365,6 +445,19 @@ ACTION fusion::initconfig(){
 		_e.total_cpu_funds_returned = ZERO_WAX;
 		_e.total_added_to_redemption_bucket = ZERO_WAX;
 	});	
+}
+
+ACTION fusion::initstate2(){
+	require_auth(get_self());
+
+	eosio::check(!state_s_2.exists(), "State2 already exists");
+
+	state2 s2{};
+	s2.last_incentive_distribution = 0;
+	s2.incentives_bucket = ZERO_LSWAX;
+	s2.total_value_locked = ZERO_WAX;
+
+	state_s_2.set(s2, _self);
 }
 
 ACTION fusion::inittop21(){
@@ -952,6 +1045,13 @@ ACTION fusion::rmvcpucntrct(const eosio::name& contract_to_remove){
     }
 }
 
+ACTION fusion::rmvincentive(const uint64_t& poolId){
+	require_auth( _self );
+
+	auto lp_itr = lpfarms_t.require_find( poolId, "this poolId doesn't exist in the lpfarms table" );
+	lp_itr = lpfarms_t.erase( lp_itr );
+}
+
 ACTION fusion::setfallback(const eosio::name& caller, const eosio::name& receiver){
 	require_auth(caller);
 	check( is_an_admin(caller), "this action requires auth from one of the admin_wallets in the config table" );
@@ -960,6 +1060,48 @@ ACTION fusion::setfallback(const eosio::name& caller, const eosio::name& receive
 	config c = configs.get();
 	c.fallback_cpu_receiver = receiver;
 	configs.set(c, _self);
+}
+
+ACTION fusion::setincentive(const uint64_t& poolId, const eosio::symbol& symbol_to_incentivize, const eosio::name& contract_to_incentivize, const double& parts_to_allocate){
+	require_auth( _self );
+	check(parts_to_allocate > (double) 0, "parts_to_allocate must be positive");
+
+	auto itr = pools_t.require_find(poolId, "this poolId does not exist");
+
+	if( (itr->tokenA.quantity.symbol != symbol_to_incentivize && itr->tokenA.contract != contract_to_incentivize)
+		&&
+		(itr->tokenB.quantity.symbol != symbol_to_incentivize && itr->tokenB.contract != contract_to_incentivize)
+
+	){
+		check(false, "this poolId does not contain the symbol/contract combo you entered");
+	}
+
+	if(symbol_to_incentivize == LSWAX_SYMBOL && contract_to_incentivize == TOKEN_CONTRACT){
+		check(false, "LSWAX cannot be paired against itself");
+	}
+
+	auto lp_itr = lpfarms_t.find( poolId );
+
+	if(lp_itr == lpfarms_t.end()){
+
+		lpfarms_t.emplace(_self, [&](auto &_lp){
+			_lp.poolId = poolId;
+  			_lp.symbol_to_incentivize = symbol_to_incentivize;
+  			_lp.contract_to_incentivize = contract_to_incentivize;
+  			_lp.parts_to_allocate = parts_to_allocate;
+		});
+
+	} else {
+
+		lpfarms_t.modify(lp_itr, _self, [&](auto &_lp){
+			_lp.poolId = poolId;
+  			_lp.symbol_to_incentivize = symbol_to_incentivize;
+  			_lp.contract_to_incentivize = contract_to_incentivize;
+  			_lp.parts_to_allocate = parts_to_allocate;
+		});
+
+	}
+
 }
 
 

@@ -30,6 +30,7 @@ CONTRACT fusion : public contract {
 		contract(receiver, code, ds),
 		configs(receiver, receiver.value),
 		states(receiver, receiver.value),
+		state_s_2(receiver, receiver.value),
 		top21_s(receiver, receiver.value)
 		{}		
 
@@ -42,8 +43,10 @@ CONTRACT fusion : public contract {
 		ACTION claimrewards(const eosio::name& user);
 		ACTION claimswax(const eosio::name& user);
 		ACTION clearexpired(const eosio::name& user);
+		ACTION createfarms();
 		ACTION distribute();
 		ACTION initconfig();
+		ACTION initstate2();
 		ACTION inittop21();
 		ACTION instaredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
@@ -54,7 +57,9 @@ CONTRACT fusion : public contract {
 		ACTION removeadmin(const eosio::name& admin_to_remove);
 		ACTION reqredeem(const eosio::name& user, const eosio::asset& swax_to_redeem, const bool& accept_replacing_prev_requests);
 		ACTION rmvcpucntrct(const eosio::name& contract_to_remove);
+		ACTION rmvincentive(const uint64_t& poolId);
 		ACTION setfallback(const eosio::name& caller, const eosio::name& receiver);
+		ACTION setincentive(const uint64_t& poolId, const eosio::symbol& symbol_to_incentivize, const eosio::name& contract_to_incentivize, const double& parts_to_allocate);
 		ACTION setpolshare(const double& pol_share);
 		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);
 		ACTION stake(const eosio::name& user);
@@ -72,18 +77,23 @@ CONTRACT fusion : public contract {
 		//Singletons
 		config_singleton configs;
 		state_singleton states;
+		state_singleton_2 state_s_2;
 		top21_singleton top21_s;
 
 		//Multi Index Tables
+		alcor_contract::incentives_table incentives_t = alcor_contract::incentives_table(ALCOR_CONTRACT, ALCOR_CONTRACT.value);
+		alcor_contract::pools_table pools_t = alcor_contract::pools_table(ALCOR_CONTRACT, ALCOR_CONTRACT.value);
 		debug_table debug_t = debug_table(get_self(), get_self().value);
 		eco_table eco_t = eco_table(get_self(), get_self().value);
 		epochs_table epochs_t = epochs_table(get_self(), get_self().value);
+		lpfarms_table lpfarms_t = lpfarms_table(get_self(), get_self().value);
 		snaps_table snaps_t = snaps_table(get_self(), get_self().value);
 		producers_table _producers = producers_table(SYSTEM_CONTRACT, SYSTEM_CONTRACT.value);
 		staker_table staker_t = staker_table(get_self(), get_self().value);
 
 
 		//Functions
+		void create_alcor_farm(const uint64_t& poolId, const eosio::symbol& token_symbol, const eosio::name& token_contract);
 		void debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance);
 		std::string cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp);
 		std::vector<std::string> get_words(std::string memo);

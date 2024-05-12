@@ -157,6 +157,45 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		return;
   	}
 
+  	/** lp_incentives
+  	 *  to be used as rewards for creating farms on alcor
+  	 */ 
+
+  	if( memo == "lp_incentives" ){
+  		check( tkcontract == WAX_CONTRACT, "only WAX is accepted with lp_incentives memo" );
+  		sync_epoch();
+
+  		state s = states.get();
+  		state2 s2 = state_s_2.get();
+
+  		issue_swax(quantity.amount);
+  		s.wax_available_for_rentals.amount = safeAddInt64( s.wax_available_for_rentals.amount, quantity.amount );
+
+		double lsWAX_per_sWAX;
+
+		//need to account for initial period where the values are still 0
+		if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
+			lsWAX_per_sWAX = (double) 1;
+		} else {
+			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
+		}
+
+		double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
+		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+
+		issue_lswax(converted_lsWAX_i64, _self);
+
+  		s2.incentives_bucket.amount = safeAddInt64( s2.incentives_bucket.amount, converted_lsWAX_amount );
+
+  		s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, quantity.amount );
+  		s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);
+
+  		states.set(s, _self);
+  		state_s_2.set(s2, _self);
+
+  		return;
+  	}
+
   	/** cpu rental return
   	 * 	these are funds coming back from one of the CPU rental contracts after being staked/rented
   	 */

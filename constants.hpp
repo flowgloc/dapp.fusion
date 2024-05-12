@@ -5,6 +5,7 @@ static constexpr int64_t MAX_ASSET_AMOUNT = 4611686018427387903;
 static constexpr uint64_t MAX_ASSET_AMOUNT_U64 = 4611686018427387903;
 
 //Contract names
+static constexpr eosio::name ALCOR_CONTRACT = "swap.alcor"_n;
 static constexpr eosio::name POL_CONTRACT = "pol.fusion"_n;
 static constexpr eosio::name SYSTEM_CONTRACT = "eosio"_n;
 static constexpr eosio::name TOKEN_CONTRACT = "token.fusion"_n;
@@ -22,6 +23,7 @@ static const eosio::asset ZERO_SWAX = eosio::asset(0, SWAX_SYMBOL);
 static const eosio::asset ZERO_WAX = eosio::asset(0, WAX_SYMBOL);
 
 //Other
+static constexpr uint64_t LP_FARM_DURATION_SECONDS = 604800; /* 1 week */
 static constexpr uint64_t INITIAL_EPOCH_START_TIMESTAMP = 1710460800; /* 3/15/2024 00:00:00 GMT */
 static constexpr uint64_t MAXIMUM_WAX_TO_RENT = 10000000; /* 10 Million WAX */
 static constexpr uint64_t MINIMUM_PRODUCERS_TO_VOTE_FOR = 16;

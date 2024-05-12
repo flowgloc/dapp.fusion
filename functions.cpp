@@ -1,5 +1,12 @@
 #pragma once
 
+void fusion::create_alcor_farm(const uint64_t& poolId, const eosio::symbol& token_symbol, const eosio::name& token_contract){
+  action(permission_level{get_self(), "active"_n}, ALCOR_CONTRACT,"newincentive"_n,
+      std::tuple{ get_self(), poolId, eosio::extended_asset(ZERO_LSWAX, TOKEN_CONTRACT), (uint32_t) LP_FARM_DURATION_SECONDS}
+    ).send();
+  return;
+}
+
 void fusion::debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance){
   //need to know which epochs to check
   state s = states.get();
@@ -144,7 +151,7 @@ void fusion::issue_swax(const int64_t& amount){
 }
 
 bool fusion::memo_is_expected(const std::string& memo){
-  if( memo == "wax_lswax_liquidity" || memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" || memo == "cpu rental return" ){
+  if( memo == "wax_lswax_liquidity" || memo == "stake" || memo == "unliquify" || memo == "waxfusion_revenue" || memo == "cpu rental return" || memo == "lp_incentives" ){
     return true;
   }
 

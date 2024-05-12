@@ -1,5 +1,52 @@
 #pragma once
 
+namespace alcor_contract {
+  struct CurrSlotS {
+    uint128_t     sqrtPriceX64;
+    int32_t       tick;
+    uint32_t      lastObservationTimestamp;
+    uint32_t      currentObservationNum;
+    uint32_t      maxObservationNum;
+  };
+
+
+  struct[[eosio::table]] incentives {
+    uint64_t                  id;
+    eosio::name               creator;
+    uint64_t                  poolId;
+    eosio::extended_asset     reward;
+    uint32_t                  periodFinish;
+    uint32_t                  rewardsDuration;
+    uint128_t                 rewardRateE18;
+    uint128_t                 rewardPerTokenStored;
+    uint64_t                  totalStakingWeight;
+    uint32_t                  lastUpdateTime;
+    uint32_t                  numberOfStakes;
+
+    uint64_t  primary_key()const { return id; }
+  };
+  typedef eosio::multi_index< "incentives"_n, incentives> incentives_table;
+
+  struct[[eosio::table]] pools_struct {
+    uint64_t                  id;
+    bool                      active;
+    eosio::extended_asset     tokenA;
+    eosio::extended_asset     tokenB;
+    uint32_t                  fee;
+    uint8_t                   feeProtocol;
+    int32_t                   tickSpacing;
+    uint64_t                  maxLiquidityPerTick;
+    CurrSlotS                 currSlot;
+    uint64_t                  feeGrowthGlobalAX64;
+    uint64_t                  feeGrowthGlobalBX64;
+    eosio::asset              protocolFeeA;
+    eosio::asset              protocolFeeB;
+    uint64_t                  liquidity;
+
+    uint64_t  primary_key()const { return id; }
+  };
+  typedef eosio::multi_index< "pools"_n, pools_struct> pools_table;
+}
 
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
   eosio::asset                      minimum_stake_amount;
@@ -91,6 +138,17 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] epochs {
   uint64_t primary_key() const { return start_time; }
 };
 using epochs_table = eosio::multi_index<"epochs"_n, epochs
+>;
+
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] lpfarms {
+  uint64_t                poolId;
+  eosio::symbol           symbol_to_incentivize;
+  eosio::name             contract_to_incentivize;
+  double                  parts_to_allocate;
+  
+  uint64_t primary_key() const { return poolId; }
+};
+using lpfarms_table = eosio::multi_index<"lpfarms"_n, lpfarms
 >;
 
 inline eosio::block_signing_authority convert_to_block_signing_authority( const eosio::public_key& producer_key ) {
@@ -273,6 +331,18 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state {
 };
 using state_singleton = eosio::singleton<"state"_n, state>;
 
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state2 {
+  uint64_t          last_incentive_distribution;
+  eosio::asset      incentives_bucket;
+  eosio::asset      total_value_locked;
+
+
+  EOSLIB_SERIALIZE(state2, (last_incentive_distribution)
+                          (incentives_bucket)
+                          (total_value_locked)
+                          )
+};
+using state_singleton_2 = eosio::singleton<"state2"_n, state2>;
 
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] top21 {
   std::vector<eosio::name>    block_producers;
