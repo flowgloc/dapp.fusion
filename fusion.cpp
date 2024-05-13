@@ -206,7 +206,6 @@ ACTION fusion::clearexpired(const eosio::name& user){
 */
 
 ACTION fusion::createfarms(){
-	require_auth( _self );
 	sync_epoch();
 	state2 s2 = state_s_2.get();
 
