@@ -134,17 +134,6 @@ struct [[eosio::table]] delegated_bandwidth {
 typedef eosio::multi_index< "delband"_n, delegated_bandwidth > del_bandwidth_table;
 
 
-struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] ecosystem {
-  eosio::name                   beneficiary;
-  eosio::asset                  wax_balance;
-  eosio::asset                  total_wax_received;
-  
-  uint64_t primary_key() const { return beneficiary.value; }
-};
-using eco_table = eosio::multi_index<"ecosystem"_n, ecosystem
->;
-
-
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] epochs {
   uint64_t          start_time;
   uint64_t          time_to_unstake;

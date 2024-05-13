@@ -90,7 +90,6 @@ CONTRACT fusion : public contract {
 		alcor_contract::incentives_table incentives_t = alcor_contract::incentives_table(ALCOR_CONTRACT, ALCOR_CONTRACT.value);
 		alcor_contract::pools_table pools_t = alcor_contract::pools_table(ALCOR_CONTRACT, ALCOR_CONTRACT.value);
 		debug_table debug_t = debug_table(get_self(), get_self().value);
-		eco_table eco_t = eco_table(get_self(), get_self().value);
 		epochs_table epochs_t = epochs_table(get_self(), get_self().value);
 		lpfarms_table lpfarms_t = lpfarms_table(get_self(), get_self().value);
 		snaps_table snaps_t = snaps_table(get_self(), get_self().value);

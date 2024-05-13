@@ -285,8 +285,6 @@ ACTION fusion::distribute(){
 	double pol_allocation = safeMulDouble(amount_to_distribute, c.pol_share);
 	double ecosystem_share = amount_to_distribute - user_allocation - pol_allocation;
 
-	//TODO: extra check to make sure the allocation percentages do not add up to > (double) 1
-
 	double sum_of_sWAX_and_lsWAX = safeAddDouble( (double) s.swax_currently_earning.amount, (double) s.swax_currently_backing_lswax.amount );
 
 	double swax_currently_earning_allocation = 
@@ -563,7 +561,8 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
     check( swax_to_redeem.amount > 0, "Must redeem a positive quantity" );
     check( swax_to_redeem.amount < MAX_ASSET_AMOUNT, "quantity too large" );
 
-    eosio::asset new_sWAX_balance = staker->swax_balance - swax_to_redeem;
+    eosio::asset new_sWAX_balance = staker->swax_balance;
+    new_sWAX_balance.amount = safeSubInt64( new_sWAX_balance.amount, swax_to_redeem.amount );
 
 	//debit requested amount from their staked balance
 	staker_t.modify(staker, same_payer, [&](auto &_s){
@@ -592,6 +591,8 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 
 	//add the 0.05% to the revenue_awaiting_distribution
 	s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, (int64_t) protocol_fee_double );
+
+	retire_swax(swax_to_redeem.amount);
 
 	//set the state
 	states.set(s, _self);
