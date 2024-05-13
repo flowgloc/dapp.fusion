@@ -267,6 +267,27 @@ struct [[eosio::table]] refund_request {
 typedef eosio::multi_index< "refunds"_n, refund_request >      refunds_table;
 
 
+/**
+* total bytes for a row is 560, except for the initial row which was 896
+* scoped by epoch ID. contract pays ram and removes rows after epoch ends
+*/
+
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] renters {
+  uint64_t      ID;
+  eosio::name   renter; /* secondary */
+  eosio::name   rent_to_account;
+  eosio::asset  amount_staked;
+  
+  uint64_t primary_key() const { return ID; }
+  uint64_t second_key() const { return renter.value; }
+  uint128_t by_from_to_combo() const { return mix64to128( renter.value, rent_to_account.value ); }
+};
+using renters_table = eosio::multi_index<"renters"_n, renters,
+eosio::indexed_by<"renter"_n, eosio::const_mem_fun<renters, uint64_t, &renters::second_key>>,
+eosio::indexed_by<"fromtocombo"_n, eosio::const_mem_fun<renters, uint128_t, &renters::by_from_to_combo>>
+>;
+
+
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] snapshots {
   uint64_t          timestamp;
 

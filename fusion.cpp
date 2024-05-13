@@ -1297,6 +1297,12 @@ ACTION fusion::synctvl(const eosio::name& caller){
 	sync_tvl();
 }
 
+/** TODO: uint64_t epoch_id, int limit
+ *  if epoch_id != 0, use the epoch_id in case there is 
+ *  ever a reason why the automated process fails
+ *  if limit != 0, rows_limit = limit
+ */
+
 ACTION fusion::unstakecpu(){
 	//anyone can call this
 
@@ -1321,7 +1327,24 @@ ACTION fusion::unstakecpu(){
 		check( false, ( epoch_itr->cpu_wallet.to_string() + " has nothing to unstake" ).c_str() );
 	}	
 
-	action(permission_level{get_self(), "active"_n}, epoch_itr->cpu_wallet,"unstakebatch"_n,std::tuple{ (int) 1000 }).send();
+	int rows_limit = 500;
+
+	action(permission_level{get_self(), "active"_n}, epoch_itr->cpu_wallet,"unstakebatch"_n,std::tuple{ rows_limit }).send();
+
+	renters_table renters_t = renters_table( _self, epoch_to_check );
+
+	if( renters_t.begin() == renters_t.end() ){
+		return;
+	}
+
+	int count = 0;
+	auto rental_itr = renters_t.begin();
+	while (rental_itr != renters_t.end()) {
+		if (count == rows_limit) return;
+		rental_itr = renters_t.erase( rental_itr );
+		count ++;
+	}
+
 }
 
 ACTION fusion::updatetop21(){
