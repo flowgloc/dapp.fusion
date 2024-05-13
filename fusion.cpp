@@ -3,6 +3,7 @@
 #include "safe.cpp"
 #include "on_notify.cpp"
 
+
 ACTION fusion::addadmin(const eosio::name& admin_to_add){
 	require_auth(_self);
 	check( is_account(admin_to_add), "admin_to_add is not a wax account" );
@@ -591,6 +592,7 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 
 	//add the 0.05% to the revenue_awaiting_distribution
 	s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, (int64_t) protocol_fee_double );
+	s.swax_currently_earning.amount = safeSubInt64( s.swax_currently_earning.amount, swax_to_redeem.amount );
 
 	retire_swax(swax_to_redeem.amount);
 
