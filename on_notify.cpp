@@ -22,8 +22,6 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   		issue_swax(quantity.amount);	
 
-  		/* staked balance for user is not necessary since all is being liquified */
-
   		sync_epoch();  		
 
 	    state s = states.get();

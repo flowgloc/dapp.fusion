@@ -206,7 +206,7 @@ ACTION fusion::clearexpired(const eosio::name& user){
 */
 
 ACTION fusion::createfarms(){
-	require_auth( _self ); /* TODO: remove require_auth after testing */
+	require_auth( _self );
 	sync_epoch();
 	state2 s2 = state_s_2.get();
 
@@ -218,7 +218,7 @@ ACTION fusion::createfarms(){
 
 	if(incentives_t.begin() != incentives_t.end()){
 		it --;
-	    next_key = it->id; //+ 1; TODO add back the +1 after first farm is funded
+	    next_key = it->id+ 1;
 	}
 
 	double total_parts = 0.0;
@@ -240,7 +240,7 @@ ACTION fusion::createfarms(){
 		total_lswax_allocated = safeAddInt64( total_lswax_allocated, lswax_allocation_i64 );
 		const std::string memo = "incentreward#" + std::to_string( next_key );
 
-		//create_alcor_farm(lp_itr->poolId, lp_itr->symbol_to_incentivize, lp_itr->contract_to_incentivize);
+		create_alcor_farm(lp_itr->poolId, lp_itr->symbol_to_incentivize, lp_itr->contract_to_incentivize);
 
 		auto alcor_itr = incentives_t.find(next_key);
 		check( alcor_itr->poolId == lp_itr->poolId, ("poolId for " + lp_itr->symbol_to_incentivize.code().to_string() + " doesn't match").c_str() );
