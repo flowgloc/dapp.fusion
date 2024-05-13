@@ -382,6 +382,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		double amount_received_double = (double) quantity.amount;
 
   		check( amount_received_double >= expected_amount_received, ("expected to receive " + std::to_string(expected_amount_received) + " WAX" ).c_str() );
+  		s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, (int64_t) expected_amount_received );
 
   		//if they sent more than expected, calculate difference and refund it
   		if( amount_received_double > expected_amount_received ){
