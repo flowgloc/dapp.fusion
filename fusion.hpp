@@ -69,7 +69,7 @@ CONTRACT fusion : public contract {
 		ACTION stakeallcpu();
 		ACTION sync(const eosio::name& caller);
 		ACTION synctvl(const eosio::name& caller);
-		ACTION unstakecpu();
+		ACTION unstakecpu(const uint64_t& epoch_id, const int& limit);
 		ACTION updatetop21();
 
 		//Notifications

@@ -1303,7 +1303,7 @@ ACTION fusion::synctvl(const eosio::name& caller){
  *  if limit != 0, rows_limit = limit
  */
 
-ACTION fusion::unstakecpu(){
+ACTION fusion::unstakecpu(const uint64_t& epoch_id, const int& limit){
 	//anyone can call this
 
 	sync_epoch();
@@ -1314,7 +1314,7 @@ ACTION fusion::unstakecpu(){
 
 	//the only epoch that should ever need unstaking is the one that started prior to current epoch
 	//calculate the epoch prior to the most recently started one
-	uint64_t epoch_to_check = s.last_epoch_start_time - c.seconds_between_epochs;
+	uint64_t epoch_to_check = epoch_id == 0 ? s.last_epoch_start_time - c.seconds_between_epochs : epoch_id;
 
 	//if the unstake time is <= now, look up its cpu contract is delband table
 	auto epoch_itr = epochs_t.require_find( epoch_to_check, ("could not find epoch " + std::to_string( epoch_to_check ) ).c_str() );
@@ -1327,7 +1327,7 @@ ACTION fusion::unstakecpu(){
 		check( false, ( epoch_itr->cpu_wallet.to_string() + " has nothing to unstake" ).c_str() );
 	}	
 
-	int rows_limit = 500;
+	int rows_limit = limit == 0 ? 500 : limit;
 
 	action(permission_level{get_self(), "active"_n}, epoch_itr->cpu_wallet,"unstakebatch"_n,std::tuple{ rows_limit }).send();
 
