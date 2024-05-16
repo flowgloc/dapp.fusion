@@ -1,5 +1,6 @@
 #include "fusion.hpp"
 #include "functions.cpp"
+#include "integer_functions.cpp"
 #include "safe.cpp"
 #include "on_notify.cpp"
 
@@ -8,11 +9,11 @@ ACTION fusion::addadmin(const eosio::name& admin_to_add){
 	require_auth(_self);
 	check( is_account(admin_to_add), "admin_to_add is not a wax account" );
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
 	if( std::find( c.admin_wallets.begin(), c.admin_wallets.end(), admin_to_add ) == c.admin_wallets.end() ){
 		c.admin_wallets.push_back( admin_to_add );
-		configs.set(c, _self);
+		config_s_3.set(c, _self);
 	} else {
 		check( false, ( admin_to_add.to_string() + " is already an admin" ).c_str() );
 	}
@@ -22,11 +23,11 @@ ACTION fusion::addcpucntrct(const eosio::name& contract_to_add){
 	require_auth(_self);
 	check( is_account(contract_to_add), "contract_to_add is not a wax account" );
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
 	if( std::find( c.cpu_contracts.begin(), c.cpu_contracts.end(), contract_to_add ) == c.cpu_contracts.end() ){
 		c.cpu_contracts.push_back( contract_to_add );
-		configs.set(c, _self);
+		config_s_3.set(c, _self);
 	} else {
 		check( false, ( contract_to_add.to_string() + " is already a cpu contract" ).c_str() );
 	}
@@ -42,7 +43,7 @@ ACTION fusion::claimrefunds()
 {
 	//anyone can call this
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
 	bool refundsToClaim = false;
 
@@ -62,6 +63,9 @@ ACTION fusion::claimrefunds()
 }
 
 ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const double& max_slippage){
+	//TODO: change param and front end, then remove this const
+	const uint64_t max_slippage_1e6 = 0;
+
 	require_auth(user);
 	sync_epoch();
 	sync_user(user);
@@ -80,21 +84,12 @@ ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expecte
 
 		state s = states.get();
 
-		double lsWAX_per_sWAX;
+		int64_t converted_lsWAX_i64 = internal_liquify( claimable_wax_amount, s );	
 
-		//need to account for initial period where the values are still 0
-		if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
-			lsWAX_per_sWAX = (double) 1;
-		} else {
-			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
-		}
+	    check( max_slippage >= 0 && max_slippage < ONE_HUNDRED_PERCENT_1E6, "max slippage is out of range" );
 
-		double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) claimable_wax_amount );
-		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
-
-	    check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
-	    double minimum_output_percentage = (double) 1 - max_slippage;
-	    double minimum_output = safeMulDouble( (double) expected_output.amount, minimum_output_percentage );
+		uint64_t minimum_output_percentage = ONE_HUNDRED_PERCENT_1E6 - max_slippage;
+		int64_t minimum_output = calculate_asset_share( expected_output.amount, minimum_output_percentage );
 
 	    check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output would be " + asset(converted_lsWAX_i64, LSWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, LSWAX_SYMBOL).to_string() );		
 
@@ -182,7 +177,7 @@ ACTION fusion::clearexpired(const eosio::name& user){
 	sync_epoch();
 	sync_user(user);
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 	state s = states.get();	
 	requests_tbl requests_t = requests_tbl(get_self(), user.value);
 
@@ -220,23 +215,13 @@ ACTION fusion::createfarms(){
 	    next_key = it->id+ 1;
 	}
 
-	double total_parts = 0.0;
 	int64_t total_lswax_allocated = 0;
 
 	for(auto lp_itr = lpfarms_t.begin(); lp_itr != lpfarms_t.end(); lp_itr++){
-		total_parts = safeAddDouble(total_parts, lp_itr->parts_to_allocate);
-	}
 
-	check( total_parts > (double) 0.0, "no parts to allocate" );
-
-	for(auto lp_itr = lpfarms_t.begin(); lp_itr != lpfarms_t.end(); lp_itr++){
-
-		double farm_share_percentage = safeDivDouble( lp_itr->parts_to_allocate, total_parts );
-
-		double lswax_allocation_double = safeMulDouble( (double) s2.incentives_bucket.amount, farm_share_percentage );
-		int64_t lswax_allocation_i64 = (int64_t) lswax_allocation_double;
-
+		int64_t lswax_allocation_i64 = calculate_asset_share( s2.incentives_bucket.amount, lp_itr->percent_share_1e6 );
 		total_lswax_allocated = safeAddInt64( total_lswax_allocated, lswax_allocation_i64 );
+
 		const std::string memo = "incentreward#" + std::to_string( next_key );
 
 		create_alcor_farm(lp_itr->poolId, lp_itr->symbol_to_incentivize, lp_itr->contract_to_incentivize);
@@ -251,7 +236,7 @@ ACTION fusion::createfarms(){
 
 	check(total_lswax_allocated <= s2.incentives_bucket.amount, "overallocation of incentives_bucket");
 
-	s2.incentives_bucket = ZERO_LSWAX;
+	s2.incentives_bucket.amount = safeSubInt64( s2.incentives_bucket.amount, total_lswax_allocated );
 	s2.last_incentive_distribution = now();
 	state_s_2.set(s2, _self);
 	
@@ -265,7 +250,7 @@ ACTION fusion::createfarms(){
 ACTION fusion::distribute(){
 	sync_epoch();
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 	state s = states.get();
 	state2 s2 = state_s_2.get();
 
@@ -279,48 +264,25 @@ ACTION fusion::distribute(){
 		return;
 	}
 
-	//amount to distribute = revenue_awaiting_distribution
-	double amount_to_distribute = (double) s.revenue_awaiting_distribution.amount;
-	double user_allocation = safeMulDouble(amount_to_distribute, c.user_share);
-	double pol_allocation = safeMulDouble(amount_to_distribute, c.pol_share);
-	double ecosystem_share = amount_to_distribute - user_allocation - pol_allocation;
+	int64_t amount_to_distribute = s.revenue_awaiting_distribution.amount;
+	int64_t user_alloc_i64 = calculate_asset_share( amount_to_distribute, c.user_share_1e6 );
+	int64_t pol_alloc_i64 = calculate_asset_share( amount_to_distribute, c.pol_share_1e6 );
+	int64_t eco_alloc_i64 = calculate_asset_share( amount_to_distribute, c.pol_share_1e6 );
 
-	double sum_of_sWAX_and_lsWAX = safeAddDouble( (double) s.swax_currently_earning.amount, (double) s.swax_currently_backing_lswax.amount );
+	int64_t sum_of_sWAX_and_lsWAX = safeAddInt64( s.swax_currently_earning.amount, s.swax_currently_backing_lswax.amount );
 
-	double swax_currently_earning_allocation = 
-		safeMulDouble( user_allocation, 
-			safeDivDouble( (double) s.swax_currently_earning.amount, sum_of_sWAX_and_lsWAX ) 
-			);
-
-	double autocompounding_allocation = 
-		safeMulDouble( user_allocation, 
-			safeDivDouble( (double) s.swax_currently_backing_lswax.amount, sum_of_sWAX_and_lsWAX )
-			);	
+	int64_t swax_earning_alloc_i64 = internal_get_swax_allocations( user_alloc_i64, s.swax_currently_earning.amount, sum_of_sWAX_and_lsWAX );
+	int64_t swax_autocompounding_alloc_i64 = internal_get_swax_allocations( user_alloc_i64, s.swax_currently_backing_lswax.amount, sum_of_sWAX_and_lsWAX );
 
 	//issue sWAX
-	int64_t swax_amount_to_issue = safeAddInt64( (int64_t) autocompounding_allocation, (int64_t) ecosystem_share );
+	int64_t swax_amount_to_issue = safeAddInt64( swax_autocompounding_alloc_i64, swax_earning_alloc_i64 );
 	issue_swax( swax_amount_to_issue );
 
 	//increase the backing of lsWAX with the newly issued sWAX
-	s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, (int64_t) autocompounding_allocation );
-
-	//i64 allocations
-	int64_t amount_to_distribute_i64 = (int64_t) amount_to_distribute;
-	int64_t user_alloc_i64 = (int64_t) user_allocation;
-	int64_t pol_alloc_i64 = (int64_t) pol_allocation;
-	int64_t eco_alloc_i64 = (int64_t) ecosystem_share;
-
-	int64_t swax_earning_alloc_i64 = (int64_t) swax_currently_earning_allocation;
-	int64_t swax_autocompounding_alloc_i64 = (int64_t) autocompounding_allocation;
+	s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, swax_autocompounding_alloc_i64 );
 	
-	//check the total sum is in range
-	int64_t alloc_check_1 = safeAddInt64(user_alloc_i64, pol_alloc_i64);
-	int64_t alloc_check_2 = safeAddInt64(alloc_check_1, eco_alloc_i64);
-	check( alloc_check_2 <= amount_to_distribute_i64, "allocation check 2 failed" );
-
-	//check that the user sums are <= the user allocation
-	int64_t alloc_check_3 = safeAddInt64(swax_autocompounding_alloc_i64, swax_earning_alloc_i64);
-	check( alloc_check_3 <= user_alloc_i64, "allocation check 3 failed" );
+	validate_distribution_amounts(user_alloc_i64, pol_alloc_i64, eco_alloc_i64, swax_autocompounding_alloc_i64,
+      swax_earning_alloc_i64, amount_to_distribute);
 
 	//set revenue_awaiting_distribution to 0
 	s.revenue_awaiting_distribution.amount = 0;
@@ -332,17 +294,7 @@ ACTION fusion::distribute(){
 	transfer_tokens( POL_CONTRACT, asset(pol_alloc_i64, WAX_SYMBOL), WAX_CONTRACT, std::string("pol allocation from waxfusion distribution") );
 
 	//incentives lsWAX should be issued at the new rate instead of autocompounding it immediately after minting it
-	double lsWAX_per_sWAX;
-
-	//need to account for initial period where the values are still 0
-	if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
-		lsWAX_per_sWAX = (double) 1;
-	} else {
-		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
-	}
-
-	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, ecosystem_share );
-	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+	int64_t converted_lsWAX_i64 = internal_liquify( eco_alloc_i64, s );
 
 	issue_lswax(converted_lsWAX_i64, _self);
 
@@ -359,12 +311,12 @@ ACTION fusion::distribute(){
 		_snap.lswax_autocompounding_bucket = asset(swax_autocompounding_alloc_i64, WAX_SYMBOL);
 		_snap.pol_bucket = asset(pol_alloc_i64, WAX_SYMBOL);
 		_snap.ecosystem_bucket = asset(eco_alloc_i64, WAX_SYMBOL);
-		_snap.total_distributed = asset(amount_to_distribute_i64, WAX_SYMBOL);	
+		_snap.total_distributed = asset(amount_to_distribute, WAX_SYMBOL);	
 		_snap.total_swax_earning = s.swax_currently_earning;
 	});
 
 	//update total_revenue_distributed in state
-	s.total_revenue_distributed.amount = safeAddInt64(s.total_revenue_distributed.amount, amount_to_distribute_i64);
+	s.total_revenue_distributed.amount = safeAddInt64(s.total_revenue_distributed.amount, amount_to_distribute);
 
 	//update next_dist in the state table
 	s.next_distribution += c.seconds_between_distributions;
@@ -447,6 +399,41 @@ ACTION fusion::initconfig(){
 		_e.total_cpu_funds_returned = ZERO_WAX;
 		_e.total_added_to_redemption_bucket = ZERO_WAX;
 	});	
+}
+
+
+ACTION fusion::initconfig3(){
+	require_auth( _self );
+
+	eosio::check(!config_s_3.exists(), "Config3 already exists");
+
+	config3 c{};
+	c.minimum_stake_amount = eosio::asset(100000000, WAX_SYMBOL);
+	c.minimum_unliquify_amount = eosio::asset(100000000, LSWAX_SYMBOL);
+	c.seconds_between_distributions = 86400;
+	c.max_snapshots_to_process = 180;
+	c.initial_epoch_start_time = INITIAL_EPOCH_START_TIMESTAMP;
+	c.cpu_rental_epoch_length_seconds = 60 * 60 * 24 * 14; /* 14 days */
+	c.seconds_between_epochs = 60 * 60 * 24 * 7; /* 7 days */
+	c.user_share_1e6 = 85 * SCALE_FACTOR_1E6;
+	c.pol_share_1e6 = 7 * SCALE_FACTOR_1E6;
+	c.ecosystem_share_1e6 = 8 * SCALE_FACTOR_1E6;
+	c.admin_wallets = {
+		"guild.waxdao"_n,
+		"oig"_n,
+		_self,
+		"admin.wax"_n
+	};
+	c.cpu_contracts = {
+		"cpu1.fusion"_n,
+		"cpu2.fusion"_n,
+		"cpu3.fusion"_n
+	};
+	c.redemption_period_length_seconds = 60 * 60 * 24 * 2; /* 2 days */
+	c.seconds_between_stakeall = 60 * 60 * 24; /* once per day */
+	c.fallback_cpu_receiver = "updatethings"_n;
+	config_s_3.set(c, _self);
+	
 }
 
 ACTION fusion::initstate2(){
@@ -579,18 +566,18 @@ ACTION fusion::instaredeem(const eosio::name& user, const eosio::asset& swax_to_
 
 	//calculate the 0.05% fee
 	//calculate the remainder for the user
-	double procotol_fee_percentage = (double) 0.0005;
-	double user_percentage = (double) 1 - procotol_fee_percentage;
-	double protocol_fee_double = safeMulDouble( procotol_fee_percentage, (double) swax_to_redeem.amount );
-	double amount_to_transfer_double = safeMulDouble( user_percentage, swax_to_redeem.amount );
+	uint64_t procotol_fee_1e6 = 5000; 
+	uint64_t user_percentage_1e6 = 100000000 - procotol_fee_1e6;
+	int64_t protocol_share = calculate_asset_share( swax_to_redeem.amount, procotol_fee_1e6 );
+	int64_t user_share = calculate_asset_share( swax_to_redeem.amount, user_percentage_1e6 );
 
-	check( safeAddInt64( (int64_t) amount_to_transfer_double, (int64_t) protocol_fee_double ) <= swax_to_redeem.amount, "error calculating protocol fee" );
+	check( safeAddInt64( protocol_share, user_share ) <= swax_to_redeem.amount, "error calculating protocol fee" );
 
 	//transfer the funds to the user
-	transfer_tokens( user, asset( (int64_t) amount_to_transfer_double, WAX_SYMBOL), WAX_CONTRACT, std::string("your sWAX redemption from waxfusion.io - liquid staking protocol") );
+	transfer_tokens( user, asset( user_share, WAX_SYMBOL ), WAX_CONTRACT, std::string("your sWAX redemption from waxfusion.io - liquid staking protocol") );
 
 	//add the 0.05% to the revenue_awaiting_distribution
-	s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, (int64_t) protocol_fee_double );
+	s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, protocol_share );
 	s.swax_currently_earning.amount = safeSubInt64( s.swax_currently_earning.amount, swax_to_redeem.amount );
 
 	retire_swax(swax_to_redeem.amount);
@@ -627,21 +614,10 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 		_s.last_update = now();
 	});
 
-	//get the current state table
 	state s = states.get();
 
 	//calculate equivalent amount of lsWAX (BEFORE adjusting sWAX amounts)
-	double lsWAX_per_sWAX;
-
-	//need to account for initial period where the values are still 0
-	if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
-		lsWAX_per_sWAX = (double) 1;
-	} else {
-		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
-	}
-
-	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
-	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+	int64_t converted_lsWAX_i64 = internal_liquify(quantity.amount, s);
 
 	//subtract swax amount from swax_currently_earning
 	s.swax_currently_earning.amount = safeSubInt64(s.swax_currently_earning.amount, quantity.amount);
@@ -666,6 +642,8 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantity, 
 	const eosio::asset& expected_output, const double& max_slippage)
 {
+	//TODO: change param and front end, then remove this const
+	const uint64_t max_slippage_1e6 = 0;
 
 	require_auth(user);
     check(quantity.amount > 0, "Invalid quantity.");
@@ -686,7 +664,8 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 		check(false, "you are trying to liquify more than you have");
 	}
 
-	eosio::asset new_sWAX_balance = staker->swax_balance - quantity;
+	int64_t new_sWAX_balance_i64 = safeSubInt64( staker->swax_balance.amount, quantity.amount );
+	eosio::asset new_sWAX_balance = asset( new_sWAX_balance_i64, SWAX_SYMBOL );
 
 	//debit requested amount from their staked balance
 	staker_t.modify(staker, same_payer, [&](auto &_s){
@@ -694,27 +673,16 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 		_s.last_update = now();
 	});
 
-	//get the current state table
 	state s = states.get();
 
-	//calculate equivalent amount of lsWAX (BEFORE adjusting sWAX amounts)
-	double lsWAX_per_sWAX;
+	int64_t converted_lsWAX_i64 = internal_liquify(quantity.amount, s);
 
-	//need to account for initial period where the values are still 0
-	if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
-		lsWAX_per_sWAX = (double) 1;
-	} else {
-		lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
-	}
+	check( max_slippage_1e6 >= 0 && max_slippage_1e6 < ONE_HUNDRED_PERCENT_1E6, "max slippage is out of range" );
 
-	double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
-	int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+	uint64_t minimum_output_percentage = ONE_HUNDRED_PERCENT_1E6 - max_slippage;
+	int64_t minimum_output = calculate_asset_share( expected_output.amount, minimum_output_percentage );
 
-	check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
-	double minimum_output_percentage = (double) 1 - max_slippage;
-	double minimum_output = safeMulDouble( (double) expected_output.amount, minimum_output_percentage );
-
-	check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output would be " + asset(converted_lsWAX_i64, LSWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, LSWAX_SYMBOL).to_string() );
+	check( converted_lsWAX_i64 >= minimum_output, "output would be " + asset(converted_lsWAX_i64, LSWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, LSWAX_SYMBOL).to_string() );
 
 	//subtract swax amount from swax_currently_earning
 	s.swax_currently_earning.amount = safeSubInt64(s.swax_currently_earning.amount, quantity.amount);
@@ -745,7 +713,7 @@ ACTION fusion::reallocate(){
 	sync_epoch();
 
 	state s = states.get();
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
 	//if now > epoch start time + 48h, it means redemption is over
 	check( now() > s.last_epoch_start_time + c.redemption_period_length_seconds, "redemption period has not ended yet" );
@@ -766,7 +734,7 @@ ACTION fusion::redeem(const eosio::name& user){
 
 	//find out if there is a current redemption period, and when
 	state s = states.get();
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
 	uint64_t redemption_start_time = s.last_epoch_start_time;
 	uint64_t redemption_end_time = s.last_epoch_start_time + c.redemption_period_length_seconds;
@@ -818,13 +786,13 @@ ACTION fusion::redeem(const eosio::name& user){
 ACTION fusion::removeadmin(const eosio::name& admin_to_remove){
 	require_auth(_self);
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
     auto itr = std::remove(c.admin_wallets.begin(), c.admin_wallets.end(), admin_to_remove);
 
     if (itr != c.admin_wallets.end()) {
         c.admin_wallets.erase(itr, c.admin_wallets.end());
-        configs.set(c, _self);
+        config_s_3.set(c, _self);
     } else {
         check(false, (admin_to_remove.to_string() + " is not an admin").c_str());
     }
@@ -860,7 +828,7 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 	*/
 
 	state s = states.get();
-	config c = configs.get();
+	config3 c = config_s_3.get();
 	requests_tbl requests_t = requests_tbl(get_self(), user.value);
 
 	/** if there is currently a redemption window open, we need to check if 
@@ -1070,13 +1038,13 @@ ACTION fusion::reqredeem(const eosio::name& user, const eosio::asset& swax_to_re
 ACTION fusion::rmvcpucntrct(const eosio::name& contract_to_remove){
 	require_auth(_self);
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
     auto itr = std::remove(c.cpu_contracts.begin(), c.cpu_contracts.end(), contract_to_remove);
 
     if (itr != c.cpu_contracts.end()) {
         c.cpu_contracts.erase(itr, c.cpu_contracts.end());
-        configs.set(c, _self);
+        config_s_3.set(c, _self);
     } else {
         check(false, (contract_to_remove.to_string() + " is not a cpu contract").c_str());
     }
@@ -1094,14 +1062,14 @@ ACTION fusion::setfallback(const eosio::name& caller, const eosio::name& receive
 	check( is_an_admin(caller), "this action requires auth from one of the admin_wallets in the config table" );
 	check( is_account(receiver), "cpu receiver is not a wax account" );
 
-	config c = configs.get();
+	config3 c = config_s_3.get();
 	c.fallback_cpu_receiver = receiver;
-	configs.set(c, _self);
+	config_s_3.set(c, _self);
 }
 
-ACTION fusion::setincentive(const uint64_t& poolId, const eosio::symbol& symbol_to_incentivize, const eosio::name& contract_to_incentivize, const double& parts_to_allocate){
+ACTION fusion::setincentive(const uint64_t& poolId, const eosio::symbol& symbol_to_incentivize, const eosio::name& contract_to_incentivize, const uint64_t& percent_share_1e6){
 	require_auth( _self );
-	check(parts_to_allocate > (double) 0, "parts_to_allocate must be positive");
+	check(percent_share_1e6 > 0, "percent_share_1e6 must be positive");
 
 	auto itr = pools_t.require_find(poolId, "this poolId does not exist");
 
@@ -1119,13 +1087,17 @@ ACTION fusion::setincentive(const uint64_t& poolId, const eosio::symbol& symbol_
 
 	auto lp_itr = lpfarms_t.find( poolId );
 
+	//TODO either loop through table and make sure total percentages <= ONE_HUNDRED_PERCENT_1E6
+	//or better option would be to track the total percentages in a state table and check it
+	//and update it here
+
 	if(lp_itr == lpfarms_t.end()){
 
 		lpfarms_t.emplace(_self, [&](auto &_lp){
 			_lp.poolId = poolId;
   			_lp.symbol_to_incentivize = symbol_to_incentivize;
   			_lp.contract_to_incentivize = contract_to_incentivize;
-  			_lp.parts_to_allocate = parts_to_allocate;
+  			_lp.percent_share_1e6 = percent_share_1e6;
 		});
 
 	} else {
@@ -1134,7 +1106,7 @@ ACTION fusion::setincentive(const uint64_t& poolId, const eosio::symbol& symbol_
 			_lp.poolId = poolId;
   			_lp.symbol_to_incentivize = symbol_to_incentivize;
   			_lp.contract_to_incentivize = contract_to_incentivize;
-  			_lp.parts_to_allocate = parts_to_allocate;
+  			_lp.percent_share_1e6 = percent_share_1e6;
 		});
 
 	}
@@ -1147,13 +1119,13 @@ ACTION fusion::setincentive(const uint64_t& poolId, const eosio::symbol& symbol_
 * Adjusts the percentage of revenue that goes to POL, within a limited range of 5-10%
 */
 
-ACTION fusion::setpolshare(const double& pol_share){
+ACTION fusion::setpolshare(const uint64_t& pol_share_1e6){
 	require_auth( _self );
-	check( pol_share >= (double) 0.05 && pol_share <= (double) 0.1, "acceptable range is 5-10%" );
+	check( pol_share_1e6 >= 5 * SCALE_FACTOR_1E6 && pol_share_1e6 <= 10 * SCALE_FACTOR_1E6, "acceptable range is 5-10%" );
 
-	config c = configs.get();
-	c.pol_share = pol_share;
-	configs.set(c, _self);	
+	config3 c = config_s_3.get();
+	c.pol_share_1e6 = pol_share_1e6;
+	config_s_3.set(c, _self);	
 }
 
 ACTION fusion::setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax){
@@ -1203,7 +1175,7 @@ ACTION fusion::stakeallcpu(){
 
 	//get the last epoch start time
 	state s = states.get();
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
 	//if now > epoch start time + 48h, it means redemption is over
 	check( now() >= s.next_stakeall_time, ( "next stakeall time is not until " + std::to_string(s.next_stakeall_time) ).c_str() );
@@ -1297,11 +1269,6 @@ ACTION fusion::synctvl(const eosio::name& caller){
 	sync_tvl();
 }
 
-/** TODO: uint64_t epoch_id, int limit
- *  if epoch_id != 0, use the epoch_id in case there is 
- *  ever a reason why the automated process fails
- *  if limit != 0, rows_limit = limit
- */
 
 ACTION fusion::unstakecpu(const uint64_t& epoch_id, const int& limit){
 	//anyone can call this
@@ -1310,10 +1277,11 @@ ACTION fusion::unstakecpu(const uint64_t& epoch_id, const int& limit){
 
 	//get the most recently started epoch
 	state s = states.get();
-	config c = configs.get();
+	config3 c = config_s_3.get();
 
 	//the only epoch that should ever need unstaking is the one that started prior to current epoch
 	//calculate the epoch prior to the most recently started one
+	//this can be overridden by specifying an epoch_id in the action instead of passing 0
 	uint64_t epoch_to_check = epoch_id == 0 ? s.last_epoch_start_time - c.seconds_between_epochs : epoch_id;
 
 	//if the unstake time is <= now, look up its cpu contract is delband table

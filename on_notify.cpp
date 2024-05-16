@@ -3,7 +3,7 @@
 void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, std::string memo){
 	const name tkcontract = get_first_receiver();
 
-    check( quantity.amount > 0, "Must redeem a positive quantity" );
+    check( quantity.amount > 0, "Must send a positive quantity" );
     check( quantity.amount < MAX_ASSET_AMOUNT, "quantity too large" );
 
     if( from == get_self() || to != get_self() ){
@@ -25,18 +25,8 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		sync_epoch();  		
 
 	    state s = states.get();
-	    	
-		double lsWAX_per_sWAX;
-
-		//need to account for initial period where the values are still 0
-		if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
-			lsWAX_per_sWAX = (double) 1;
-		} else {
-			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
-		}
-
-		double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
-		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
+	    
+		int64_t converted_lsWAX_i64 = internal_liquify(quantity.amount, s);
 
 		issue_lswax(converted_lsWAX_i64, _self);
 		transfer_tokens( POL_CONTRACT, asset( converted_lsWAX_i64, LSWAX_SYMBOL ), TOKEN_CONTRACT, "liquidity" );
@@ -58,7 +48,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   	if( memo == "stake" ){
   		check( tkcontract == WAX_CONTRACT, "only WAX is used for staking" );
   		
-  		config c = configs.get();
+  		config3 c = config_s_3.get();
   		check( quantity >= c.minimum_stake_amount, "minimum stake amount not met" );
 
   		//issue new sWAX to dapp contract
@@ -103,14 +93,13 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
 
   		check( tkcontract == TOKEN_CONTRACT, "only LSWAX can be unliquified" );
 
-  		config c = configs.get();
+  		config3 c = config_s_3.get();
   		check( quantity >= c.minimum_unliquify_amount, "minimum unliquify amount not met" );
 
   		//calculate the conversion rate (amount of sWAX to stake to this user)
   		state s = states.get();
-  		double sWAX_per_lsWAX = safeDivDouble( (double) s.swax_currently_backing_lswax.amount, (double) s.liquified_swax.amount );
-  		double converted_sWAX_amount = safeMulDouble( sWAX_per_lsWAX, (double) quantity.amount );
-  		int64_t converted_sWAX_i64 = (int64_t) converted_sWAX_amount;
+
+  		int64_t converted_sWAX_i64 = internal_unliquify(quantity.amount, s);
 
   		//retire the lsWAX AFTER figuring out the conversion rate
   		retire_lswax(quantity.amount);
@@ -169,21 +158,10 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		issue_swax(quantity.amount);
   		s.wax_available_for_rentals.amount = safeAddInt64( s.wax_available_for_rentals.amount, quantity.amount );
 
-		double lsWAX_per_sWAX;
-
-		//need to account for initial period where the values are still 0
-		if( s.liquified_swax.amount == 0 && s.swax_currently_backing_lswax.amount == 0 ){
-			lsWAX_per_sWAX = (double) 1;
-		} else {
-			lsWAX_per_sWAX = safeDivDouble((double) s.liquified_swax.amount, (double) s.swax_currently_backing_lswax.amount);
-		}
-
-		double converted_lsWAX_amount = safeMulDouble( lsWAX_per_sWAX, (double) quantity.amount );
-		int64_t converted_lsWAX_i64 = (int64_t) converted_lsWAX_amount;	
-
+		int64_t converted_lsWAX_i64 = internal_liquify( quantity.amount, s );		
 		issue_lswax(converted_lsWAX_i64, _self);
 
-  		s2.incentives_bucket.amount = safeAddInt64( s2.incentives_bucket.amount, converted_lsWAX_amount );
+  		s2.incentives_bucket.amount = safeAddInt64( s2.incentives_bucket.amount, converted_lsWAX_i64 );
 
   		s.swax_currently_backing_lswax.amount = safeAddInt64( s.swax_currently_backing_lswax.amount, quantity.amount );
   		s.liquified_swax.amount = safeAddInt64(s.liquified_swax.amount, converted_lsWAX_i64);
@@ -202,7 +180,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		check( tkcontract == WAX_CONTRACT, "only WAX can be sent with this memo" );
   		sync_epoch();
 
-  		config c = configs.get();
+  		config3 c = config_s_3.get();
   		check( is_cpu_contract(from), "sender is not a valid cpu rental contract" );
 
   		state s = states.get();
@@ -299,7 +277,7 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		const uint64_t epoch_id_to_rent_from = std::strtoull( words[4].c_str(), NULL, 0 );
 
   		state s = states.get();
-  		config c = configs.get();
+  		config3 c = config_s_3.get();
 
   		const uint64_t amount_to_rent_with_precision = safeMulUInt64(100000000, wax_amount_to_rent);
 
@@ -309,88 +287,21 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		//debit the wax from the rental pool
   		s.wax_available_for_rentals.amount = safeSubInt64(s.wax_available_for_rentals.amount, amount_to_rent_with_precision);
 
-  		uint64_t eleven_days = 60 * 60 * 24 * 11;
-  		double seconds_into_current_epoch = (double) now() - (double) s.last_epoch_start_time;
-  		double days_into_current_epoch = safeDivDouble( seconds_into_current_epoch, ( (double) 60 * (double) 60 * (double) 24) );
-  		double days_to_rent;
+  		uint64_t seconds_to_rent = get_seconds_to_rent_cpu(s, c, epoch_id_to_rent_from);
 
-  		if( epoch_id_to_rent_from == s.last_epoch_start_time + c.seconds_between_epochs ){
-  			//renting from epoch 3 (hasnt started yet)
-  			days_to_rent = (double) 18 - days_into_current_epoch;
+  		//TODO use 128 safemath
+  		int64_t expected_amount_received = s.cost_to_rent_1_wax.amount * wax_amount_to_rent * seconds_to_rent / days_to_seconds(1);
 
-  			//see if this epoch exists yet - if it doesn't, create it
-  			auto next_epoch_itr = epochs_t.find( epoch_id_to_rent_from );
-
-  			if( next_epoch_itr == epochs_t.end() ){
-
-  				uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
-
-				int next_cpu_index = 1;
-				bool contract_was_found = false;
-
-				for(eosio::name cpu : c.cpu_contracts){
-
-					if( cpu == s.current_cpu_contract ){
-					  contract_was_found = true;
-
-					  if(next_cpu_index == c.cpu_contracts.size()){
-					    next_cpu_index = 0;
-					  }
-					}
-
-					if(contract_was_found) break;
-					next_cpu_index ++;
-				}
-
-				check( contract_was_found, "error locating cpu contract" );
-				eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
-				check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
-
-
-  				epochs_t.emplace(_self, [&](auto &_e){
-					_e.start_time = next_epoch_start_time;
-					/* unstake 3 days before epoch ends */
-					_e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
-					_e.cpu_wallet = next_cpu_contract;
-					_e.wax_bucket = ZERO_WAX;
-					_e.wax_to_refund = ZERO_WAX;
-					/* redemption starts at the end of the epoch, ends 48h later */
-					_e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
-					_e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + c.redemption_period_length_seconds;
-					_e.total_cpu_funds_returned = ZERO_WAX;
-					_e.total_added_to_redemption_bucket = ZERO_WAX;
-  				});
-  			}
-
-  		} else if( epoch_id_to_rent_from == s.last_epoch_start_time ){
-  			//renting from epoch 2 (started most recently)
-  			days_to_rent = (double) 11 - days_into_current_epoch;
-
-  		} else if( epoch_id_to_rent_from == s.last_epoch_start_time - c.seconds_between_epochs ){
-  			//renting from epoch 1 (oldest) and we need to make sure it's less than 11 days old  			
-  			check( days_into_current_epoch < (double) 4, "it is too late to rent from this epoch, please rent from the next one" );
-
-  			//if we reached here, minimum PAYMENT is 1 full day payment (even if rental is less than 1 day)
-  			days_to_rent = (double) 4 - days_into_current_epoch < (double) 1 ? (double) 1 : (double) 4 - days_into_current_epoch;
-
-  		} else{
-  			check( false, "you are trying to rent from an invalid epoch" );
-  		}
-
-  		double expected_amount_received = safeMulDouble( (double) s.cost_to_rent_1_wax.amount, safeMulDouble( (double) wax_amount_to_rent, days_to_rent ) );
-
-  		double amount_received_double = (double) quantity.amount;
-
-  		check( amount_received_double >= expected_amount_received, ("expected to receive " + std::to_string(expected_amount_received) + " WAX" ).c_str() );
-  		s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, (int64_t) expected_amount_received );
+  		check( quantity.amount >= expected_amount_received, ("expected to receive " + std::to_string(expected_amount_received) + " WAX" ).c_str() );
+  		s.revenue_awaiting_distribution.amount = safeAddInt64( s.revenue_awaiting_distribution.amount, expected_amount_received );
 
   		//if they sent more than expected, calculate difference and refund it
-  		if( amount_received_double > expected_amount_received ){
+  		if( quantity.amount > expected_amount_received ){
   			//calculate difference
-  			double amount_to_refund = amount_received_double - expected_amount_received;
+  			int64_t amount_to_refund = safeSubInt64(quantity.amount, expected_amount_received);
 
-  			if( (int64_t) amount_to_refund > 0 ){
-  				transfer_tokens( from, asset( (int64_t) amount_to_refund, WAX_SYMBOL ), WAX_CONTRACT, "cpu rental refund from waxfusion.io - liquid staking protocol" );
+  			if( amount_to_refund > 0 ){
+  				transfer_tokens( from, asset( amount_to_refund, WAX_SYMBOL ), WAX_CONTRACT, "cpu rental refund from waxfusion.io - liquid staking protocol" );
   			}
   		}
 
@@ -438,24 +349,23 @@ void fusion::receive_token_transfer(name from, name to, eosio::asset quantity, s
   		check( tkcontract == TOKEN_CONTRACT, "only LSWAX can be unliquified" );
   		sync_epoch();
 
-  		config c = configs.get();
+  		config3 c = config_s_3.get();
   		check( quantity >= c.minimum_unliquify_amount, "minimum unliquify amount not met" );
 
   		const uint64_t expected_output = std::strtoull( words[2].c_str(), NULL, 0 );
-  		const double max_slippage = std::stod( words[3].c_str() );
+  		const uint64_t max_slippage = std::strtoull( words[3].c_str(), NULL, 0 );
 
   		//calculate the conversion rate (amount of sWAX to stake to this user)
   		state s = states.get();
-  		double sWAX_per_lsWAX = safeDivDouble((double) s.swax_currently_backing_lswax.amount, (double) s.liquified_swax.amount);
-  		double converted_sWAX_amount = safeMulDouble( sWAX_per_lsWAX, (double) quantity.amount );
-  		int64_t converted_sWAX_i64 = (int64_t) converted_sWAX_amount;
+  		int64_t converted_sWAX_i64 = internal_unliquify(quantity.amount, s);
 
-		check( max_slippage >= (double) 0 && max_slippage < (double) 1, "max slippage is out of range" );
+		check( max_slippage >= 0 && max_slippage < ONE_HUNDRED_PERCENT_1E6, "max slippage is out of range" );
 		check( expected_output > (uint64_t) 0 && expected_output <= MAX_ASSET_AMOUNT_U64, "expected output is out of range" );
-		double minimum_output_percentage = (double) 1 - max_slippage;
-		double minimum_output = safeMulDouble( (double) expected_output, minimum_output_percentage );
 
-		check( converted_sWAX_i64 >= (int64_t) minimum_output, "output would be " + asset(converted_sWAX_i64, SWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, SWAX_SYMBOL).to_string() );	  		
+		uint64_t minimum_output_percentage = ONE_HUNDRED_PERCENT_1E6 - max_slippage;
+		int64_t minimum_output = calculate_asset_share( expected_output, minimum_output_percentage );
+
+		check( converted_sWAX_i64 >= minimum_output, "output would be " + asset(converted_sWAX_i64, SWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, SWAX_SYMBOL).to_string() );	  		
 
   		retire_lswax(quantity.amount);
 

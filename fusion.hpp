@@ -29,6 +29,7 @@ CONTRACT fusion : public contract {
 		fusion(name receiver, name code, datastream<const char *> ds):
 		contract(receiver, code, ds),
 		configs(receiver, receiver.value),
+		config_s_3(receiver, receiver.value),
 		pol_state_s_2(POL_CONTRACT, POL_CONTRACT.value),
 		states(receiver, receiver.value),
 		state_s_2(receiver, receiver.value),
@@ -39,6 +40,7 @@ CONTRACT fusion : public contract {
 		//Main Actions
 		ACTION addadmin(const eosio::name& admin_to_add);
 		ACTION addcpucntrct(const eosio::name& contract_to_add);
+		int64_t calculate_asset_share(const int64_t& quantity, const uint64_t& percentage);
 		ACTION claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const double& max_slippage);
 		ACTION claimgbmvote(const eosio::name& cpu_contract);
 		ACTION claimrefunds();
@@ -48,6 +50,7 @@ CONTRACT fusion : public contract {
 		ACTION createfarms();
 		ACTION distribute();
 		ACTION initconfig();
+		ACTION initconfig3();
 		ACTION initstate2();
 		ACTION initstate3();
 		ACTION inittop21();
@@ -62,8 +65,8 @@ CONTRACT fusion : public contract {
 		ACTION rmvcpucntrct(const eosio::name& contract_to_remove);
 		ACTION rmvincentive(const uint64_t& poolId);
 		ACTION setfallback(const eosio::name& caller, const eosio::name& receiver);
-		ACTION setincentive(const uint64_t& poolId, const eosio::symbol& symbol_to_incentivize, const eosio::name& contract_to_incentivize, const double& parts_to_allocate);
-		ACTION setpolshare(const double& pol_share);
+		ACTION setincentive(const uint64_t& poolId, const eosio::symbol& symbol_to_incentivize, const eosio::name& contract_to_incentivize, const uint64_t& percent_share_1e6);
+		ACTION setpolshare(const uint64_t& pol_share_1e6);
 		ACTION setrentprice(const eosio::name& caller, const eosio::asset& cost_to_rent_1_wax);
 		ACTION stake(const eosio::name& user);
 		ACTION stakeallcpu();
@@ -80,6 +83,7 @@ CONTRACT fusion : public contract {
 
 		//Singletons
 		config_singleton configs;
+		config_singleton_3 config_s_3;
 		pol_contract::state_singleton_2 pol_state_s_2;
 		state_singleton states;
 		state_singleton_2 state_s_2;
@@ -101,10 +105,16 @@ CONTRACT fusion : public contract {
 		//Functions
 		void create_alcor_farm(const uint64_t& poolId, const eosio::symbol& token_symbol, const eosio::name& token_contract);
 		void credit_total_claimable_wax(const eosio::asset& amount_to_credit);
+		uint64_t days_to_seconds(const uint64_t& days);
 		void debit_total_claimable_wax(const eosio::asset& amount_to_debit);
 		void debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance);
 		std::string cpu_stake_memo(const eosio::name& cpu_receiver, const uint64_t& epoch_timestamp);
+		uint64_t get_seconds_to_rent_cpu(state s, config3 c, const uint64_t& epoch_id_to_rent_from);
 		std::vector<std::string> get_words(std::string memo);
+		int64_t internal_get_swax_allocations( const int64_t& amount, const int64_t& swax_divisor, const int64_t& swax_supply );
+		int64_t internal_get_wax_owed_to_user(const int64_t& user_stake, const int64_t& total_stake, const int64_t& reward_pool);
+		int64_t internal_liquify(const int64_t& quantity, state s);
+		int64_t internal_unliquify(const int64_t& quantity, state s);
 		bool is_an_admin(const eosio::name& user);
 		bool is_cpu_contract(const eosio::name& contract);
 		void issue_lswax(const int64_t& amount, const eosio::name& receiver);
@@ -117,14 +127,15 @@ CONTRACT fusion : public contract {
 		void sync_tvl();
 		void sync_user(const eosio::name& user);
 		void transfer_tokens(const name& user, const asset& amount_to_send, const name& contract, const std::string& memo);
+		void validate_distribution_amounts(const int64_t& user_alloc_i64,	const int64_t& pol_alloc_i64, 
+			const int64_t& eco_alloc_i64, const int64_t& swax_autocompounding_alloc_i64,
+      		const int64_t& swax_earning_alloc_i64, const int64_t& amount_to_distribute_i64);
 		void validate_token(const eosio::symbol& symbol, const eosio::name& contract);
 		void zero_distribution();
 
 		//Safemath
-		double safeAddDouble(const double& a, const double& b);
 		int64_t safeAddInt64(const int64_t& a, const int64_t& b);
-		double safeDivDouble(const double& a, const double& b);
-		double safeMulDouble(const double& a, const double& b);
+		uint128_t safeMulUInt128(const uint128_t& a, const uint128_t& b);
 		uint64_t safeMulUInt64(const uint64_t& a, const uint64_t& b);
 		int64_t safeSubInt64(const int64_t& a, const int64_t& b);
 };

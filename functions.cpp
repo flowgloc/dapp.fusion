@@ -32,7 +32,7 @@ void fusion::debit_total_claimable_wax(const eosio::asset& amount_to_debit){
 void fusion::debit_user_redemptions_if_necessary(const name& user, const asset& swax_balance){
   //need to know which epochs to check
   state s = states.get();
-  config c = configs.get();
+  config3 c = config_s_3.get();
 
   requests_tbl requests_t = requests_tbl(get_self(), user.value);
 
@@ -122,6 +122,83 @@ std::string fusion::cpu_stake_memo(const eosio::name& cpu_receiver, const uint64
   return ("|stake_cpu|" + cpu_receiver.to_string() + "|" + std::to_string(epoch_timestamp) + "|").c_str();
 }
 
+uint64_t fusion::days_to_seconds(const uint64_t& days){
+  return (uint64_t) SECONDS_PER_DAY * days;
+}
+
+uint64_t fusion::get_seconds_to_rent_cpu( state s, config3 c, const uint64_t& epoch_id_to_rent_from ){
+      uint64_t eleven_days = 60 * 60 * 24 * 11;
+      uint64_t seconds_into_current_epoch = now() - s.last_epoch_start_time;
+
+      uint64_t seconds_to_rent;
+
+      if( epoch_id_to_rent_from == s.last_epoch_start_time + c.seconds_between_epochs ){
+        //renting from epoch 3 (hasnt started yet)
+        seconds_to_rent = days_to_seconds(18) - seconds_into_current_epoch;
+
+        //see if this epoch exists yet - if it doesn't, create it
+        auto next_epoch_itr = epochs_t.find( epoch_id_to_rent_from );
+
+        if( next_epoch_itr == epochs_t.end() ){
+
+          uint64_t next_epoch_start_time = s.last_epoch_start_time + c.seconds_between_epochs;
+
+          int next_cpu_index = 1;
+          bool contract_was_found = false;
+
+        for(eosio::name cpu : c.cpu_contracts){
+
+          if( cpu == s.current_cpu_contract ){
+            contract_was_found = true;
+
+            if(next_cpu_index == c.cpu_contracts.size()){
+              next_cpu_index = 0;
+            }
+          }
+
+          if(contract_was_found) break;
+          next_cpu_index ++;
+        }
+
+        check( contract_was_found, "error locating cpu contract" );
+        eosio::name next_cpu_contract = c.cpu_contracts[next_cpu_index];
+        check( next_cpu_contract != s.current_cpu_contract, "next cpu contract can not be the same as the current contract" );
+
+
+          epochs_t.emplace(_self, [&](auto &_e){
+          _e.start_time = next_epoch_start_time;
+          /* unstake 3 days before epoch ends */
+          _e.time_to_unstake = next_epoch_start_time + c.cpu_rental_epoch_length_seconds - (60 * 60 * 24 * 3);
+          _e.cpu_wallet = next_cpu_contract;
+          _e.wax_bucket = ZERO_WAX;
+          _e.wax_to_refund = ZERO_WAX;
+          /* redemption starts at the end of the epoch, ends 48h later */
+          _e.redemption_period_start_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds;
+          _e.redemption_period_end_time = next_epoch_start_time + c.cpu_rental_epoch_length_seconds + c.redemption_period_length_seconds;
+          _e.total_cpu_funds_returned = ZERO_WAX;
+          _e.total_added_to_redemption_bucket = ZERO_WAX;
+          });
+        }
+
+      } else if( epoch_id_to_rent_from == s.last_epoch_start_time ){
+        //renting from epoch 2 (started most recently)
+        seconds_to_rent = days_to_seconds(11) - seconds_into_current_epoch;
+
+      } else if( epoch_id_to_rent_from == s.last_epoch_start_time - c.seconds_between_epochs ){
+        //renting from epoch 1 (oldest) and we need to make sure it's less than 11 days old       
+        check( seconds_into_current_epoch < days_to_seconds(4), "it is too late to rent from this epoch, please rent from the next one" );
+
+        //if we reached here, minimum PAYMENT is 1 full day payment (even if rental is less than 1 day)
+        seconds_to_rent = days_to_seconds(4) - seconds_into_current_epoch < days_to_seconds(1) ? days_to_seconds(1) : days_to_seconds(4) - seconds_into_current_epoch;
+
+      } else{
+        check( false, "you are trying to rent from an invalid epoch" );
+      }
+
+      return seconds_to_rent;
+}
+
+
 std::vector<std::string> fusion::get_words(std::string memo){
   std::string delim = "|";
   std::vector<std::string> words{};
@@ -133,6 +210,7 @@ std::vector<std::string> fusion::get_words(std::string memo){
   return words;
 }
 
+
 /**
 * is_an_admin
 * this contract is multisig and all of the most important features will require msig
@@ -143,7 +221,7 @@ std::vector<std::string> fusion::get_words(std::string memo){
 */
 
 bool fusion::is_an_admin(const eosio::name& user){
-  config c = configs.get();
+  config3 c = config_s_3.get();
 
   if( std::find(c.admin_wallets.begin(), c.admin_wallets.end(), user) != c.admin_wallets.end() ){
     return true;
@@ -153,7 +231,7 @@ bool fusion::is_an_admin(const eosio::name& user){
 }
 
 bool fusion::is_cpu_contract(const eosio::name& contract){
-  config c = configs.get();
+  config3 c = config_s_3.get();
 
   if( std::find( c.cpu_contracts.begin(), c.cpu_contracts.end(), contract) != c.cpu_contracts.end() ){
     return true;
@@ -204,7 +282,7 @@ void fusion::retire_swax(const int64_t& amount){
 void fusion::sync_epoch(){
   //find out when the last epoch started
   state s = states.get();
-  config c = configs.get();
+  config3 c = config_s_3.get();
 
   int next_cpu_index = 1;
   bool contract_was_found = false;
@@ -269,7 +347,7 @@ void fusion::sync_epoch(){
 */ 
 
 void fusion::sync_tvl(){
-  config c = configs.get();
+  config3 c = config_s_3.get();
   state s = states.get();
   state2 s2 = state_s_2.get();
   state3 s3 = state_s_3.get();
@@ -358,7 +436,7 @@ void fusion::sync_user(const eosio::name& user){
 
   if(low_itr == snaps_t.end()) return;
 
-  config c = configs.get();
+  config3 c = config_s_3.get();
   state s = states.get();
 
   int count = 0;
@@ -371,14 +449,10 @@ void fusion::sync_user(const eosio::name& user){
       //only calculate if there was sWAX earning
       //redundant safety check to make sure the snapshot timestamp is eligible
       if(it->swax_earning_bucket.amount > 0 && it->timestamp >= lower_bound_timestamp){
-        //calculate the % of snapshot owned by this user
-        double percentage_allocation = safeDivDouble( (double) staker->swax_balance.amount, (double) it->total_swax_earning.amount );
+        //calculate the % of snapshot owned by this user and add it to their owed_to
 
-        //use that to get a wax quantity (needs to be positive)
-        double wax_allocation = safeMulDouble( (double) it->swax_earning_bucket.amount, percentage_allocation );
-       
-        //add that quantity to wax_owed_to_user
-        wax_owed_to_user = safeAddInt64(wax_owed_to_user, (int64_t) wax_allocation);
+        int64_t wax_allocation = internal_get_wax_owed_to_user(staker->swax_balance.amount, it->total_swax_earning.amount, it->swax_earning_bucket.amount);
+        wax_owed_to_user = safeAddInt64(wax_owed_to_user, wax_allocation);
       }
 
       count ++;
@@ -409,6 +483,21 @@ void fusion::transfer_tokens(const name& user, const asset& amount_to_send, cons
   return;
 }
 
+void fusion::validate_distribution_amounts(const int64_t& user_alloc_i64, const int64_t& pol_alloc_i64, 
+      const int64_t& eco_alloc_i64, const int64_t& swax_autocompounding_alloc_i64,
+      const int64_t& swax_earning_alloc_i64, const int64_t& amount_to_distribute_i64)
+{
+  //check the total sum is in range
+  int64_t alloc_check_1 = safeAddInt64(user_alloc_i64, pol_alloc_i64);
+  int64_t alloc_check_2 = safeAddInt64(alloc_check_1, eco_alloc_i64);
+  check( alloc_check_2 <= amount_to_distribute_i64, "allocation check 2 failed" );
+
+  //check that the user sums are <= the user allocation
+  int64_t alloc_check_3 = safeAddInt64(swax_autocompounding_alloc_i64, swax_earning_alloc_i64);
+  check( alloc_check_3 <= user_alloc_i64, "allocation check 3 failed" );
+  return;  
+}
+
 void fusion::validate_token(const eosio::symbol& symbol, const eosio::name& contract)
 {
   if(symbol == WAX_SYMBOL){
@@ -425,7 +514,7 @@ void fusion::validate_token(const eosio::symbol& symbol, const eosio::name& cont
 }
 
 void fusion::zero_distribution(){
-  config c = configs.get();
+  config3 c = config_s_3.get();
   state s = states.get();
 
   snaps_t.emplace(get_self(), [&](auto &_snap){

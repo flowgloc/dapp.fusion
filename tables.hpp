@@ -106,6 +106,43 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
 using config_singleton = eosio::singleton<"config"_n, config>;
 
 
+struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config3 {
+  eosio::asset                      minimum_stake_amount;
+  eosio::asset                      minimum_unliquify_amount;
+  uint64_t                          seconds_between_distributions;
+  uint64_t                          max_snapshots_to_process;
+  uint64_t                          initial_epoch_start_time;
+  uint64_t                          cpu_rental_epoch_length_seconds;
+  uint64_t                          seconds_between_epochs; /* epochs overlap, this is 1 week */
+  uint64_t                          user_share_1e6;
+  uint64_t                          pol_share_1e6;
+  uint64_t                          ecosystem_share_1e6;
+  std::vector<eosio::name>          admin_wallets;
+  std::vector<eosio::name>          cpu_contracts;
+  uint64_t                          redemption_period_length_seconds;
+  uint64_t                          seconds_between_stakeall;
+  eosio::name                       fallback_cpu_receiver;
+
+  EOSLIB_SERIALIZE(config3, (minimum_stake_amount)
+                            (minimum_unliquify_amount)
+                            (seconds_between_distributions)
+                            (max_snapshots_to_process)
+                            (initial_epoch_start_time)
+                            (cpu_rental_epoch_length_seconds)
+                            (seconds_between_epochs)
+                            (user_share_1e6)
+                            (pol_share_1e6)
+                            (ecosystem_share_1e6)
+                            (admin_wallets)
+                            (cpu_contracts)
+                            (redemption_period_length_seconds)
+                            (seconds_between_stakeall)
+                            (fallback_cpu_receiver)
+                            )
+};
+using config_singleton_3 = eosio::singleton<"config3"_n, config3>;
+
+
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] debug {
   uint64_t      ID;
   std::string   message;
@@ -154,7 +191,7 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] lpfarms {
   uint64_t                poolId;
   eosio::symbol           symbol_to_incentivize;
   eosio::name             contract_to_incentivize;
-  double                  parts_to_allocate;
+  uint64_t                percent_share_1e6; //percentage of ecosystem fund, not percentage of total revenue
   
   uint64_t primary_key() const { return poolId; }
 };
@@ -329,14 +366,9 @@ struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] state {
   eosio::asset      user_funds_bucket;
   eosio::asset      total_revenue_distributed;
   uint64_t          next_distribution;
-
-  /* redemptions might be better off stored with epochs, since they are connected */
   eosio::asset      wax_for_redemption;
   uint64_t          redemption_period_start; 
   uint64_t          redemption_period_end;
-
-
-
   uint64_t          last_epoch_start_time;
   eosio::asset      wax_available_for_rentals;
   eosio::asset      cost_to_rent_1_wax;
