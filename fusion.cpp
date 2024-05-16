@@ -62,9 +62,7 @@ ACTION fusion::claimrefunds()
 	check( refundsToClaim, "there are no refunds to claim" );
 }
 
-ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const double& max_slippage){
-	//TODO: change param and front end, then remove this const
-	const uint64_t max_slippage_1e6 = 0;
+ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const uint64_t& max_slippage_1e6){
 
 	require_auth(user);
 	sync_epoch();
@@ -86,9 +84,9 @@ ACTION fusion::claimaslswax(const eosio::name& user, const eosio::asset& expecte
 
 		int64_t converted_lsWAX_i64 = internal_liquify( claimable_wax_amount, s );	
 
-	    check( max_slippage >= 0 && max_slippage < ONE_HUNDRED_PERCENT_1E6, "max slippage is out of range" );
+	    check( max_slippage_1e6 >= 0 && max_slippage_1e6 < ONE_HUNDRED_PERCENT_1E6, "max slippage is out of range" );
 
-		uint64_t minimum_output_percentage = ONE_HUNDRED_PERCENT_1E6 - max_slippage;
+		uint64_t minimum_output_percentage = ONE_HUNDRED_PERCENT_1E6 - max_slippage_1e6;
 		int64_t minimum_output = calculate_asset_share( expected_output.amount, minimum_output_percentage );
 
 	    check( converted_lsWAX_i64 >= (int64_t) minimum_output, "output would be " + asset(converted_lsWAX_i64, LSWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, LSWAX_SYMBOL).to_string() );		
@@ -334,37 +332,7 @@ ACTION fusion::distribute(){
 ACTION fusion::initconfig(){
 	require_auth(get_self());
 
-	eosio::check(!configs.exists(), "Config already exists");
 	eosio::check(!states.exists(), "State already exists");
-
-	config c{};
-	c.minimum_stake_amount = eosio::asset(100000000, WAX_SYMBOL);
-	c.minimum_unliquify_amount = eosio::asset(100000000, LSWAX_SYMBOL);
-	c.seconds_between_distributions = 86400;
-	c.max_snapshots_to_process = 180;
-	c.initial_epoch_start_time = INITIAL_EPOCH_START_TIMESTAMP;
-	c.cpu_rental_epoch_length_seconds = 60 * 60 * 24 * 14; /* 14 days */
-	c.seconds_between_epochs = 60 * 60 * 24 * 7; /* 7 days */
-	c.user_share = 0.85;
-	c.pol_share = 0.07;
-	c.ecosystem_fund = {
-	};
-	c.admin_wallets = {
-		"guild.waxdao"_n,
-		"oig"_n,
-		"workr.fusion"_n,
-		_self
-		//"admin.wax"_n
-	};
-	c.cpu_contracts = {
-		"cpu1.fusion"_n,
-		"cpu2.fusion"_n,
-		"cpu3.fusion"_n
-	};
-	c.redemption_period_length_seconds = 60 * 60 * 24 * 2; /* 2 days */
-	c.seconds_between_stakeall = 60 * 60 * 24; /* once per day */
-	c.fallback_cpu_receiver = "updatethings"_n;
-	configs.set(c, _self);
 
 	state s{};
 	s.swax_currently_earning = ZERO_SWAX;
@@ -640,10 +608,8 @@ ACTION fusion::liquify(const eosio::name& user, const eosio::asset& quantity){
 }
 
 ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantity, 
-	const eosio::asset& expected_output, const double& max_slippage)
+	const eosio::asset& expected_output, const uint64_t& max_slippage_1e6)
 {
-	//TODO: change param and front end, then remove this const
-	const uint64_t max_slippage_1e6 = 0;
 
 	require_auth(user);
     check(quantity.amount > 0, "Invalid quantity.");
@@ -679,7 +645,7 @@ ACTION fusion::liquifyexact(const eosio::name& user, const eosio::asset& quantit
 
 	check( max_slippage_1e6 >= 0 && max_slippage_1e6 < ONE_HUNDRED_PERCENT_1E6, "max slippage is out of range" );
 
-	uint64_t minimum_output_percentage = ONE_HUNDRED_PERCENT_1E6 - max_slippage;
+	uint64_t minimum_output_percentage = ONE_HUNDRED_PERCENT_1E6 - max_slippage_1e6;
 	int64_t minimum_output = calculate_asset_share( expected_output.amount, minimum_output_percentage );
 
 	check( converted_lsWAX_i64 >= minimum_output, "output would be " + asset(converted_lsWAX_i64, LSWAX_SYMBOL).to_string() + " but expected " + asset(minimum_output, LSWAX_SYMBOL).to_string() );

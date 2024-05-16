@@ -28,7 +28,6 @@ CONTRACT fusion : public contract {
 
 		fusion(name receiver, name code, datastream<const char *> ds):
 		contract(receiver, code, ds),
-		configs(receiver, receiver.value),
 		config_s_3(receiver, receiver.value),
 		pol_state_s_2(POL_CONTRACT, POL_CONTRACT.value),
 		states(receiver, receiver.value),
@@ -40,8 +39,7 @@ CONTRACT fusion : public contract {
 		//Main Actions
 		ACTION addadmin(const eosio::name& admin_to_add);
 		ACTION addcpucntrct(const eosio::name& contract_to_add);
-		int64_t calculate_asset_share(const int64_t& quantity, const uint64_t& percentage);
-		ACTION claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const double& max_slippage);
+		ACTION claimaslswax(const eosio::name& user, const eosio::asset& expected_output, const uint64_t& max_slippage_1e6);
 		ACTION claimgbmvote(const eosio::name& cpu_contract);
 		ACTION claimrefunds();
 		ACTION claimrewards(const eosio::name& user);
@@ -57,7 +55,7 @@ CONTRACT fusion : public contract {
 		ACTION instaredeem(const eosio::name& user, const eosio::asset& swax_to_redeem);
 		ACTION liquify(const eosio::name& user, const eosio::asset& quantity);
 		ACTION liquifyexact(const eosio::name& user, const eosio::asset& quantity, 
-			const eosio::asset& expected_output, const double& max_slippage);
+			const eosio::asset& expected_output, const uint64_t& max_slippage_1e6);
 		ACTION reallocate();
 		ACTION redeem(const eosio::name& user);
 		ACTION removeadmin(const eosio::name& admin_to_remove);
@@ -82,7 +80,6 @@ CONTRACT fusion : public contract {
 	private:
 
 		//Singletons
-		config_singleton configs;
 		config_singleton_3 config_s_3;
 		pol_contract::state_singleton_2 pol_state_s_2;
 		state_singleton states;
@@ -103,6 +100,7 @@ CONTRACT fusion : public contract {
 
 
 		//Functions
+		int64_t calculate_asset_share(const int64_t& quantity, const uint64_t& percentage);
 		void create_alcor_farm(const uint64_t& poolId, const eosio::symbol& token_symbol, const eosio::name& token_contract);
 		void credit_total_claimable_wax(const eosio::asset& amount_to_credit);
 		uint64_t days_to_seconds(const uint64_t& days);

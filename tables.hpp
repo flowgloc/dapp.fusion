@@ -69,43 +69,6 @@ struct [[eosio::table]] account {
 typedef eosio::multi_index< "accounts"_n, account > accounts;
 
 
-struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config {
-  eosio::asset                      minimum_stake_amount;
-  eosio::asset                      minimum_unliquify_amount;
-  uint64_t                          seconds_between_distributions;
-  uint64_t                          max_snapshots_to_process;
-  uint64_t                          initial_epoch_start_time;
-  uint64_t                          cpu_rental_epoch_length_seconds;
-  uint64_t                          seconds_between_epochs; /* epochs overlap, this is 1 week */
-  double                            user_share;
-  double                            pol_share;
-  std::vector<revenue_receiver>     ecosystem_fund;
-  std::vector<eosio::name>          admin_wallets;
-  std::vector<eosio::name>          cpu_contracts;
-  uint64_t                          redemption_period_length_seconds;
-  uint64_t                          seconds_between_stakeall;
-  eosio::name                       fallback_cpu_receiver;
-
-  EOSLIB_SERIALIZE(config, (minimum_stake_amount)
-                            (minimum_unliquify_amount)
-                            (seconds_between_distributions)
-                            (max_snapshots_to_process)
-                            (initial_epoch_start_time)
-                            (cpu_rental_epoch_length_seconds)
-                            (seconds_between_epochs)
-                            (user_share)
-                            (pol_share)
-                            (ecosystem_fund)
-                            (admin_wallets)
-                            (cpu_contracts)
-                            (redemption_period_length_seconds)
-                            (seconds_between_stakeall)
-                            (fallback_cpu_receiver)
-                            )
-};
-using config_singleton = eosio::singleton<"config"_n, config>;
-
-
 struct [[eosio::table, eosio::contract(CONTRACT_NAME)]] config3 {
   eosio::asset                      minimum_stake_amount;
   eosio::asset                      minimum_unliquify_amount;

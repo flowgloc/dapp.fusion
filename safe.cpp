@@ -14,7 +14,6 @@ int64_t fusion::safeAddInt64(const int64_t& a, const int64_t& b){
 	return combinedValue;
 }
 
-
 uint128_t fusion::safeMulUInt128(const uint128_t& a, const uint128_t& b){
 
     if( a == 0 || b == 0 ) return 0;
